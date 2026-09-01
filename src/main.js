@@ -19,6 +19,17 @@ const SOFT_OSM_AREA = 6;
 const HARD_OSM_AREA = 25;
 const MAX_MARKERS = 900;
 
+// Zrzut całej Polski leży na tej samej domenie co aplikacja, więc nie zależy
+// od dostępności ani limitów luster Overpass. Overpass zostaje wyłącznie jako
+// awaryjne źródło, gdy zrzutu nie ma.
+const SNAPSHOT_URL = "/osm-poland.json";
+
+const SNAPSHOT_TAGS = {
+  shelter: "amenity=shelter",
+  firepit: "leisure=firepit",
+  picnic: "tourism=picnic_site",
+};
+
 const OVERPASS_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass-api.de/api/interpreter",
@@ -121,6 +132,9 @@ let serial = 0;
 let timer;
 let inFlight = null;
 let overpassPreferred = readPreferredEndpoint();
+let snapshot = null;
+let snapshotState = "unknown";
+let snapshotPromise = null;
 
 map.on("moveend zoomend", () => { writeHash(); schedule(); });
 window.addEventListener("hashchange", () => {
@@ -240,7 +254,7 @@ async function refresh() {
           if (id !== serial) return;
           osmPois = items;
           if (tried.length) notes.push(`OSM (pominięte serwery): ${tried.join(" | ")}`);
-          if (endpoint) notes.push(`OSM: dane z ${endpoint}`);
+          if (endpoint) notes.push(`OSM: ${endpoint}`);
           renderPois();
         },
         (e) => {
@@ -379,6 +393,11 @@ out center;`;
 }
 
 async function loadOsm(bounds, signal) {
+  const snap = await loadSnapshot();
+  if (snap) {
+    return { items: pointsFrom(snap, bounds), endpoint: `zrzut z ${snap.generated}`, tried: [] };
+  }
+
   if (areaOf(bounds) > HARD_OSM_AREA) {
     throw new Error("obszar zbyt duży dla Overpass - przybliż mapę");
   }
@@ -401,7 +420,7 @@ async function loadOsm(bounds, signal) {
   const items = unique((data.elements || []).map(normalizeOsm).filter(Boolean));
   cacheSet(key, items);
   rememberEndpoint(url);
-  return { items, endpoint: url, tried };
+  return { items, endpoint: `serwer ${url}`, tried };
 }
 
 // Lustra Overpass regularnie padają albo odbijają zapytanie limitem, więc nie
@@ -469,6 +488,56 @@ function raceOverpass(order, q, signal) {
 
     launch();
   });
+}
+
+// Pobierany raz na sesję; celowo bez sygnału z refresh(), żeby ruch mapą
+// nie anulował zapytania i nie zapamiętał zrzutu jako niedostępnego.
+function loadSnapshot() {
+  if (snapshotState === "ready") return Promise.resolve(snapshot);
+  if (snapshotState === "missing") return Promise.resolve(null);
+
+  if (!snapshotPromise) {
+    snapshotPromise = getJson(SNAPSHOT_URL, null, 30000).then(
+      (data) => {
+        if (!Array.isArray(data?.points)) throw new Error("nieprawidłowy format zrzutu");
+        snapshot = data;
+        snapshotState = "ready";
+        return snapshot;
+      },
+      () => {
+        snapshotState = "missing";
+        return null;
+      }
+    );
+  }
+  return snapshotPromise;
+}
+
+function pointsFrom(snap, bounds) {
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const out = [];
+
+  for (const [lat, lon, type, bus, osmType, osmId, name] of snap.points) {
+    if (lat < south || lat > north || lon < west || lon > east) continue;
+    const kind = snap.types[type];
+    const osmKind = snap.osmTypes[osmType];
+    out.push({
+      id: `OSM:${osmKind}/${osmId}`,
+      source: "OSM",
+      osmType: osmKind,
+      osmId,
+      lat,
+      lon,
+      type: kind,
+      bus: Boolean(bus),
+      name: name || null,
+      tagLine: SNAPSHOT_TAGS[kind] || "",
+    });
+  }
+  return out;
 }
 
 function askOverpass(url, q, signal) {

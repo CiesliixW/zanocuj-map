@@ -1,0 +1,37 @@
+name: Zrzut danych OSM
+
+# Uruchamiany ręcznie. Dane o wiatach i paleniskach zmieniają się na tyle
+# rzadko, że nie ma sensu odświeżać ich z harmonogramu - wystarczy powtórzyć
+# ten workflow, kiedy zrzut się zestarzeje.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pobierz punkty z Overpass
+        run: node scripts/fetch-osm.mjs
+
+      - name: Zapisz zrzut w repozytorium
+        run: |
+          if git diff --quiet -- public/osm-poland.json; then
+            echo "Zrzut bez zmian."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/osm-poland.json
+          git commit -m "Update OSM snapshot for Poland"
+          git push
