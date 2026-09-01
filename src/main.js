@@ -34,6 +34,7 @@ const OVERPASS_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.openstreetmap.fr/api/interpreter",
   "/api/osm",
 ];
 
@@ -64,7 +65,7 @@ document.querySelector("#app").innerHTML = `
     <div class="brand"><div class="brand-badge">🌲</div><div><h1>Zanocuj w lesie</h1><p>Obszary programu + punkty z BDL i OpenStreetMap.</p></div></div>
     <section class="panel"><h2>Pokaż na mapie</h2><div id="filters" class="filters"></div></section>
     <section class="panel stats-panel">
-      <div class="stat-row"><span>Obszary Zanocuj w lesie</span><strong id="zones">0</strong></div>
+      <div class="stat-row"><span><span class="dot dot-zone"></span> Obszary Zanocuj w lesie</span><strong id="zones">0</strong></div>
       <div class="stat-row"><span>Punkty BDL</span><strong id="bdl">0</strong></div>
       <div class="stat-row"><span>Punkty OSM</span><strong id="osm">0</strong></div>
       <div class="stat-row"><span>Pokazane markery</span><strong id="shown">0</strong></div>
@@ -134,7 +135,9 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 const zoneLayer = L.geoJSON(null, {
-  style: { color: "#236b3d", weight: 1, fillColor: "#6bbf78", fillOpacity: 0.25 },
+  // Jasny fiolet nad zielenią lasu mieszał się w szarość (4% nasycenia), stąd
+  // mocniejsze wypełnienie i wyraźniejsza obwódka.
+  style: { color: "#6b21a8", weight: 2.5, fillColor: "#a855f7", fillOpacity: 0.45 },
   onEachFeature(feature, layer) {
     const p = feature.properties || {};
     layer.bindPopup(`<div class="popup"><strong>${esc(p.nzw_ob || p.inv_nr || "Zanocuj w lesie")}</strong>${p.inv_nr ? `<div>Nr: ${esc(p.inv_nr)}</div>` : ""}</div>`);
