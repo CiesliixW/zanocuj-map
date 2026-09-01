@@ -106,6 +106,26 @@ for (const id of ["#src-bdl", "#src-osm", "#only-zone", "#hide-bus"]) {
   $(id).addEventListener("change", renderPois);
 }
 
+// Dymki Leafletu powstają i znikają w locie, więc nasłuch jest delegowany.
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".copy-coords");
+  if (!btn) return;
+  try {
+    await navigator.clipboard.writeText(btn.dataset.coords);
+    btn.textContent = "skopiowane";
+  } catch {
+    // Bez HTTPS albo bez zgody na schowek zostaje zaznaczenie ręczne.
+    const code = btn.parentElement.querySelector("code");
+    const range = document.createRange();
+    range.selectNodeContents(code);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    btn.textContent = "zaznaczone";
+  }
+  setTimeout(() => { btn.textContent = "kopiuj"; }, 1600);
+});
+
 const start = readHash() || { lat: 52, lon: 19.2, zoom: 7 };
 const map = L.map("map").setView([start.lat, start.lon], start.zoom);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -631,11 +651,25 @@ function buildMarker(p) {
       `<div class="popup-source ${p.source === "BDL" ? "source-bdl" : "source-osm"}">Źródło: ${p.source === "BDL" ? "Bank Danych o Lasach (LP)" : "OpenStreetMap"}</div>` +
       (p.tagLine ? `<div class="popup-tags">${esc(p.tagLine)}</div>` : "") +
       (p.address ? `<div>${esc(p.address)}</div>` : "") +
+      coordsBlock(p) +
       `<div class="popup-zone">${p.inZone ? "✅ w obszarze Zanocuj w lesie" : "➖ poza obszarem Zanocuj w lesie"}</div>` +
       link +
     `</div>`
   );
   return marker;
+}
+
+// Współrzędne w formacie, który Google Maps rozumie po wklejeniu.
+function coordsBlock(p) {
+  const coords = `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`;
+  const maps = `https://www.google.com/maps/search/?api=1&query=${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
+  return (
+    `<div class="popup-coords">` +
+      `<code>${coords}</code>` +
+      `<button type="button" class="copy-coords" data-coords="${coords}">kopiuj</button>` +
+      `<a target="_blank" rel="noreferrer" href="${maps}">Google Maps</a>` +
+    `</div>`
+  );
 }
 
 // Markery z BDL i OSM opisujące to samo miejsce muszą zostać oba widoczne,
