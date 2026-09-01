@@ -29,7 +29,25 @@ obszaru Zanocuj w lesie.
 - **Ukryj wiaty przystankowe (OSM)** - domyślnie wyłączone, żeby wynik zgadzał
   się 1:1 z overpass-turbo
 
-## Zapytanie Overpass
+## Skąd biorą się dane OSM
+
+Głównym źródłem jest **statyczny zrzut całej Polski** w `public/osm-poland.json`,
+serwowany z tej samej domeny co aplikacja. Dzięki temu mapa nie zależy od
+dostępności ani limitów publicznych serwerów Overpass, a punkty pojawiają się
+natychmiast po wczytaniu pliku.
+
+Zrzut generuje workflow **Zrzut danych OSM** (`.github/workflows/osm-snapshot.yml`),
+uruchamiany **ręcznie** z zakładki Actions - wiaty i paleniska zmieniają się na
+tyle rzadko, że nie ma sensu odświeżać ich z harmonogramu. Workflow odpytuje
+Overpass kaflami po 1,5 stopnia, składa wynik i commituje plik do repozytorium.
+
+Format jest krotkowy, żeby plik był możliwie mały:
+`[lat, lon, typ, wiataPrzystankowa, typOsm, idOsm, nazwa]`.
+
+Jeśli zrzutu nie ma (404), aplikacja awaryjnie odpytuje Overpass na żywo -
+opisane niżej.
+
+## Zapytanie Overpass (tryb awaryjny)
 
 Dokładnie to, które działa w overpass-turbo:
 
