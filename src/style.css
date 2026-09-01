@@ -305,7 +305,7 @@ footer {
 }
 
 .poi-marker-inner.in-zone {
-  outline: 2px solid rgba(35, 107, 61, 0.55);
+  outline: 2px solid rgba(126, 34, 206, 0.6);
   outline-offset: 2px;
 }
 
@@ -385,4 +385,15 @@ footer {
 .copy-coords:hover {
   border-color: #1f6b3c;
   color: #1f6b3c;
+}
+
+.dot-zone {
+  border-radius: 3px;
+  background: #a855f7;
+  box-shadow: 0 0 0 1px #6b21a8;
+}
+
+.stat-row .dot {
+  margin-right: 4px;
+  vertical-align: -1px;
 }
