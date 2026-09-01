@@ -3,33 +3,49 @@
 import { writeFile, mkdir } from "node:fs/promises";
 
 const MIRRORS = [
-  "https://overpass.kumi.systems/api/interpreter",
   "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.osm.jp/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
 ];
 
-// Polska z zapasem
-const AREA = { south: 48.9, west: 14.0, north: 55.0, east: 24.3 };
-const TILE = 1.5;
-const RETRIES = 4;
+const AREA = { south: 49.0, west: 14.1, north: 54.9, east: 24.2 };
+const TILE = 1.0;
+const RETRIES = 8;
+const BACKOFF_MS = [5000, 10000, 20000, 30000, 45000, 60000, 60000, 60000];
 const TYPES = ["shelter", "firepit", "picnic"];
 const OSM_TYPES = ["node", "way", "relation"];
 
-const query = (s, w, n, e) => `[out:json][timeout:180];
-(
-  nwr["amenity"="shelter"](${s},${w},${n},${e});
-  nwr["tourism"="picnic_site"](${s},${w},${n},${e});
-  nwr["leisure"="firepit"](${s},${w},${n},${e});
+// Filtr obszarowy na Polskę odcina Czechy, Niemcy czy Słowację, które w
+// narożnikach kafli potrafią oddać więcej punktów niż sama Polska. Mniej
+// danych to i mniejszy plik, i lżejsze zapytania, które nie kończą się 504.
+const query = (s, w, n, e, useArea) => {
+  const box = `(${s},${w},${n},${e})`;
+  const area = useArea ? "(area.pl)" : "";
+  return `[out:json][timeout:240];
+${useArea ? 'area["ISO3166-1"="PL"][admin_level=2]->.pl;\n' : ""}(
+  nwr["amenity"="shelter"]${area}${box};
+  nwr["tourism"="picnic_site"]${area}${box};
+  nwr["leisure"="firepit"]${area}${box};
 );
 out center;`;
+};
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const host = (url) => new URL(url).host;
+
+// Lustro, które się sypie, spada na koniec kolejki zamiast marnować co drugą
+// próbę - w praktyce jedno bywa całkowicie padnięte przez cały przebieg.
+const failures = new Map(MIRRORS.map((m) => [m, 0]));
+const byHealth = () => [...MIRRORS].sort((a, b) => failures.get(a) - failures.get(b));
 
 async function askOverpass(q) {
   let lastError = null;
 
   for (let attempt = 0; attempt < RETRIES; attempt++) {
-    const url = MIRRORS[attempt % MIRRORS.length];
+    const order = byHealth();
+    const url = order[attempt % order.length];
+
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -42,17 +58,33 @@ async function askOverpass(q) {
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 200)}`);
+        throw new Error(`HTTP ${res.status} ${(await res.text()).slice(0, 120).replace(/\s+/g, " ")}`);
       }
-      return await res.json();
+
+      const data = await res.json();
+      failures.set(url, Math.max(0, failures.get(url) - 1));
+      return data;
     } catch (error) {
       lastError = error;
-      const wait = 15000 * (attempt + 1);
-      console.warn(`  ${url} nie odpowiedział (${error.message}); ponawiam za ${wait / 1000}s`);
+      failures.set(url, failures.get(url) + 1);
+      const wait = BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)];
+      console.warn(`    ${host(url)} odmówił (${error.message}); ponawiam za ${wait / 1000}s`);
       await sleep(wait);
     }
   }
   throw new Error(`wszystkie lustra odmówiły: ${lastError?.message}`);
+}
+
+const tiles = [];
+for (let s = AREA.south; s < AREA.north; s += TILE) {
+  for (let w = AREA.west; w < AREA.east; w += TILE) {
+    tiles.push([
+      Number(s.toFixed(2)),
+      Number(w.toFixed(2)),
+      Number(Math.min(s + TILE, AREA.north).toFixed(2)),
+      Number(Math.min(w + TILE, AREA.east).toFixed(2)),
+    ]);
+  }
 }
 
 function normalize(e) {
@@ -73,7 +105,7 @@ function normalize(e) {
     t.highway === "bus_stop";
 
   // Krotka zamiast obiektu - plik jest wielokrotnie mniejszy.
-  // [lat, lon, typ, flagi, typOsm, idOsm, nazwa]
+  // [lat, lon, typ, wiataPrzystankowa, typOsm, idOsm, nazwa]
   return [
     Math.round(lat * 1e5) / 1e5,
     Math.round(lon * 1e5) / 1e5,
@@ -85,22 +117,12 @@ function normalize(e) {
   ];
 }
 
-const tiles = [];
-for (let s = AREA.south; s < AREA.north; s += TILE) {
-  for (let w = AREA.west; w < AREA.east; w += TILE) {
-    tiles.push([s, w, Math.min(s + TILE, AREA.north), Math.min(w + TILE, AREA.east)]);
-  }
-}
-
-console.log(`Pobieram ${tiles.length} kafli...`);
-
 const seen = new Set();
 const points = [];
 
-for (const [i, tile] of tiles.entries()) {
+async function runTile(tile, label) {
   const [s, w, n, e] = tile;
-  process.stdout.write(`[${i + 1}/${tiles.length}] ${s.toFixed(1)},${w.toFixed(1)} ... `);
-  const data = await askOverpass(query(s, w, n, e));
+  const data = await askOverpass(query(s, w, n, e, useArea));
   let added = 0;
 
   for (const el of data.elements || []) {
@@ -113,8 +135,51 @@ for (const [i, tile] of tiles.entries()) {
     added++;
   }
 
-  console.log(`${data.elements?.length || 0} obiektów, ${added} nowych (razem ${points.length})`);
-  await sleep(3000);
+  console.log(`${label} ${s},${w} -> ${data.elements?.length || 0} obiektów, ${added} nowych (razem ${points.length})`);
+}
+
+// Filtr obszarowy zwraca pustkę bez błędu, gdy lustro ma nieaktualną bazę
+// obszarów. Sonda nad Warszawą - miejscem, gdzie punkty na pewno są - wykrywa
+// taki przypadek, zanim zmarnujemy na niego cały przebieg.
+let useArea = true;
+console.log("Sprawdzam filtr obszarowy na Polskę...");
+const probe = await askOverpass(query(52.0, 20.5, 52.5, 21.0, true));
+if (!(probe.elements || []).length) {
+  useArea = false;
+  console.warn("Filtr obszarowy nie zwrócił nic - przechodzę na sam bbox (plik będzie większy o punkty zza granicy).");
+} else {
+  console.log(`Filtr obszarowy działa (sonda: ${probe.elements.length} obiektów).`);
+}
+
+console.log(`\nPobieram ${tiles.length} kafli po ${TILE} stopnia...`);
+
+let pending = tiles;
+
+// Pojedynczy kafel nie może wywalić całego przebiegu - nieudane wracają do
+// drugiego podejścia, kiedy lustra zdążą się pozbierać.
+for (let pass = 1; pass <= 2 && pending.length; pass++) {
+  if (pass > 1) {
+    console.log(`\nPodejście ${pass}: ponawiam ${pending.length} nieudanych kafli za 60s...`);
+    await sleep(60000);
+  }
+
+  const stillFailing = [];
+  for (const [i, tile] of pending.entries()) {
+    try {
+      await runTile(tile, `[${pass}.${i + 1}/${pending.length}]`);
+    } catch (error) {
+      console.warn(`  kafel ${tile[0]},${tile[1]} nieudany: ${error.message}`);
+      stillFailing.push(tile);
+    }
+    await sleep(2000);
+  }
+  pending = stillFailing;
+}
+
+if (pending.length) {
+  console.error(`\nNie udało się pobrać ${pending.length} kafli - nie nadpisuję zrzutu, żeby nie zostawić dziur.`);
+  for (const t of pending) console.error(`  ${t[0]},${t[1]}`);
+  process.exit(1);
 }
 
 if (!points.length) {
@@ -133,11 +198,11 @@ const payload = {
   points,
 };
 
+const json = JSON.stringify(payload);
 await mkdir("public", { recursive: true });
-await writeFile("public/osm-poland.json", JSON.stringify(payload));
+await writeFile("public/osm-poland.json", json);
 
-const bytes = JSON.stringify(payload).length;
-console.log(`\nZapisano public/osm-poland.json: ${points.length} punktów, ${(bytes / 1048576).toFixed(2)} MB`);
+console.log(`\nZapisano public/osm-poland.json: ${points.length} punktów, ${(json.length / 1048576).toFixed(2)} MB`);
 
 const byType = {};
 for (const p of points) byType[TYPES[p[2]]] = (byType[TYPES[p[2]]] || 0) + 1;
