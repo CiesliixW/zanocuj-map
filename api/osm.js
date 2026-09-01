@@ -1,4 +1,8 @@
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const OVERPASS_URLS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+];
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -21,37 +25,45 @@ export default async function handler(req, res) {
     return res.status(413).json({ error: "Query too large" });
   }
 
-  try {
-    const upstream = await fetch(OVERPASS_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        Accept: "application/json",
-      },
-      body: new URLSearchParams({ data: query }),
-    });
+  const failures = [];
 
-    if (!upstream.ok) {
-      const body = await upstream.text();
-      return res.status(upstream.status).json({
-        error: "Overpass request failed",
-        status: upstream.status,
-        details: body.slice(0, 1000),
+  for (const url of OVERPASS_URLS) {
+    try {
+      const upstream = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+          Accept: "application/json",
+          "User-Agent": "zanocuj-map/0.4 (+https://github.com/CiesliixW/zanocuj-map)",
+        },
+        body: new URLSearchParams({ data: query }),
+        signal: AbortSignal.timeout(28000),
       });
+
+      if (!upstream.ok) {
+        const body = await upstream.text();
+        failures.push(`${url}: HTTP ${upstream.status} ${body.slice(0, 250)}`);
+        continue;
+      }
+
+      const data = await upstream.json();
+
+      res.setHeader(
+        "Cache-Control",
+        "public, s-maxage=300, stale-while-revalidate=900"
+      );
+      res.setHeader("X-Overpass-Endpoint", url);
+
+      return res.status(200).json(data);
+    } catch (error) {
+      failures.push(
+        `${url}: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
-
-    const data = await upstream.json();
-
-    res.setHeader(
-      "Cache-Control",
-      "public, s-maxage=300, stale-while-revalidate=900"
-    );
-
-    return res.status(200).json(data);
-  } catch (error) {
-    return res.status(502).json({
-      error: "Could not reach Overpass",
-      details: error instanceof Error ? error.message : String(error),
-    });
   }
+
+  return res.status(502).json({
+    error: "All Overpass endpoints failed",
+    details: failures,
+  });
 }
