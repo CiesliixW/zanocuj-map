@@ -210,8 +210,23 @@ function normalizeBdl(feature, layer, kind) {
 
 async function loadOsm(bounds) {
   const bbox = [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()].join(",");
-  const q = `[out:json][timeout:20];(nwr["amenity"="shelter"](${bbox});nwr["shelter_type"="picnic_shelter"](${bbox});nwr["shelter_type"="lean_to"](${bbox});nwr["leisure"="firepit"](${bbox});nwr["fireplace"="yes"](${bbox});nwr["tourism"="picnic_site"](${bbox});nwr["leisure"="picnic_table"](${bbox});nwr["amenity"="drinking_water"](${bbox});nwr["amenity"="toilets"](${bbox});nwr["tourism"="camp_site"](${bbox}););out center tags;`;
-  const r = await fetch("/api/osm", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" }, body: new URLSearchParams({ data: q }) });
+  const q = `
+[out:json][timeout:30];
+
+(
+  nwr["amenity"="shelter"](${bbox});
+  nwr["tourism"="picnic_site"](${bbox});
+  nwr["leisure"="firepit"](${bbox});
+);
+
+out center;
+  `.trim();
+
+  const r = await fetch("/api/osm", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: new URLSearchParams({ data: q }),
+  });
   if (!r.ok) throw new Error(`Overpass HTTP ${r.status}: ${await r.text()}`);
   const data = await r.json();
   return unique((data.elements || []).map(normalizeOsm).filter(Boolean));
@@ -224,12 +239,9 @@ function normalizeOsm(e) {
   const lon = e.lon ?? e.center?.lon;
   if (typeof lat !== "number" || typeof lon !== "number") return null;
   let type = null;
-  if (t.leisure === "firepit" || t.fireplace === "yes") type = "firepit";
-  else if (t.amenity === "shelter" || t.shelter_type === "picnic_shelter" || t.shelter_type === "lean_to") type = "shelter";
-  else if (t.tourism === "picnic_site" || t.leisure === "picnic_table") type = "picnic";
-  else if (t.amenity === "drinking_water") type = "water";
-  else if (t.amenity === "toilets") type = "toilets";
-  else if (t.tourism === "camp_site") type = "campsite";
+  if (t.leisure === "firepit") type = "firepit";
+  else if (t.amenity === "shelter") type = "shelter";
+  else if (t.tourism === "picnic_site") type = "picnic";
   if (!type) return null;
   return { id: `OSM:${e.type}/${e.id}`, source: "OSM", osmType: e.type, osmId: e.id, lat, lon, type, name: t.name || null };
 }
