@@ -129,10 +129,41 @@ document.addEventListener("click", async (e) => {
 
 const start = readHash() || { lat: 52, lon: 19.2, zoom: 7 };
 const map = L.map("map").setView([start.lat, start.lon], start.zoom);
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
-}).addTo(map);
+
+const baseLayers = {
+  "Mapa": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+  }),
+  "Satelita": L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 19, attribution: "Zdjęcia &copy; Esri, Maxar, Earthstar Geographics" }
+  ),
+  // Ortofotomapa Geoportalu jest dla Polski dużo ostrzejsza niż zdjęcia
+  // globalne, ale pokrywa wyłącznie teren kraju.
+  "Ortofoto PL": L.tileLayer(
+    "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMTS/StandardResolution" +
+      "?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTOFOTOMAPA&STYLE=default" +
+      "&FORMAT=image/jpeg&tileMatrixSet=EPSG:3857&tileMatrix=EPSG:3857:{z}&tileRow={y}&tileCol={x}",
+    { maxZoom: 19, attribution: "Ortofotomapa &copy; Główny Urząd Geodezji i Kartografii" }
+  ),
+};
+
+baseLayers[readBaseLayer()].addTo(map);
+L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
+map.on("baselayerchange", (e) => {
+  try { localStorage.setItem("basemap", e.name); } catch { /* tryb prywatny */ }
+  document.body.classList.toggle("on-imagery", e.name !== "Mapa");
+});
+document.body.classList.toggle("on-imagery", readBaseLayer() !== "Mapa");
+
+function readBaseLayer() {
+  try {
+    const v = localStorage.getItem("basemap");
+    if (v && baseLayers[v]) return v;
+  } catch { /* tryb prywatny */ }
+  return "Mapa";
+}
 
 const zoneLayer = L.geoJSON(null, {
   // Jasny fiolet nad zielenią lasu mieszał się w szarość (4% nasycenia), stąd

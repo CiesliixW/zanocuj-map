@@ -79,6 +79,18 @@ liczy się pierwsza poprawna odpowiedź - reszta zostaje anulowana. Serwer, któ
 wygrał, zapamiętuje się w `localStorage` i następnym razem startuje pierwszy.
 Proxy odpytywane jest metodą GET, żeby CDN mógł cache'ować odpowiedź (24 h).
 
+## Podkłady mapy
+
+Przełącznik w prawym górnym rogu mapy, wybór zapamiętywany w `localStorage`:
+
+- **Mapa** - standardowe kafle OpenStreetMap (domyślne)
+- **Satelita** - zdjęcia Esri World Imagery, pokrycie globalne
+- **Ortofoto PL** - ortofotomapa Geoportalu (GUGiK), dużo ostrzejsza od zdjęć
+  globalnych, ale wyłącznie dla terenu Polski
+
+Na podkładach fotograficznych obszary Zanocuj w lesie dostają jaśniejszy kontur
+i lżejsze wypełnienie, żeby teren pozostał czytelny.
+
 ## Warstwy BDL
 
 - 0 - obszary Zanocuj w lesie (poligony)
