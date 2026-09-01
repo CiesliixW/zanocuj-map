@@ -164,18 +164,22 @@ async function runSearch(q) {
   searchList.classList.add("hidden");
 
   try {
-    const data = await getJson(`/api/geocode?q=${encodeURIComponent(q)}`, searchAbort.signal, 12000);
-    // W dev proxy oddaje surową tablicę z Nominatima, w produkcji funkcja
-    // serverless pakuje wynik w { results }.
-    const raw = Array.isArray(data) ? data : data.results || [];
-    searchHits = raw
-      .map((r) => ({
-        name: r.name || r.display_name || "",
-        lat: Number(r.lat),
-        lon: Number(r.lon),
-        bbox: Array.isArray(r.bbox || r.boundingbox) ? (r.bbox || r.boundingbox).map(Number) : null,
-      }))
-      .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lon));
+    const r = await fetchWithTimeout(
+      `/api/geocode?q=${encodeURIComponent(q)}`, {}, searchAbort.signal, 12000
+    );
+    const data = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      // Treść błędu mówi, który geokoder odmówił i z jakim kodem - bez tego
+      // diagnoza sprowadza się do zgadywania.
+      const detail = Array.isArray(data?.details) ? ` - ${data.details.join(" | ")}` : "";
+      note(`Wyszukiwanie nie zadziałało: ${data?.error || `HTTP ${r.status}`}${detail}`);
+      return;
+    }
+
+    searchHits = (data?.results || []).filter(
+      (h) => Number.isFinite(h.lat) && Number.isFinite(h.lon)
+    );
 
     if (!searchHits.length) {
       note("Brak wyników.");
