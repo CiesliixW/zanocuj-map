@@ -7,15 +7,21 @@ import { point } from "@turf/helpers";
 const MIN_ZONE_ZOOM = 8;
 const MIN_POI_ZOOM = 10;
 const PAD = 0.35;
+const HEDGE_MS = 3500;
+const OSM_TIMEOUT = 25000;
 const CACHE_TTL = 10 * 60 * 1000;
 const CACHE_MAX = 80;
 const DEBOUNCE = 250;
-const MAX_OSM_AREA = 1.2;
+// Margines pobierania zwężamy tak, żeby bbox dla Overpass zmieścił się w
+// SOFT; dopiero sam widok większy niż HARD jest odrzucany. Przy MIN_POI_ZOOM
+// nie zdarza się to na żadnym realnym ekranie.
+const SOFT_OSM_AREA = 6;
+const HARD_OSM_AREA = 25;
 const MAX_MARKERS = 900;
 
 const OVERPASS_ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
   "/api/osm",
 ];
@@ -177,10 +183,11 @@ async function refresh() {
   const controller = new AbortController();
   inFlight = controller;
   const id = ++serial;
-  const bounds = padBounds(view, PAD);
+  const bounds = padBounds(view, padFor(view));
   const started = performance.now();
   const notes = [];
   let failed = false;
+  let osmError = null;
 
   clearDebug();
   hideMessage();
@@ -240,6 +247,7 @@ async function refresh() {
           if (id !== serial) return;
           osmPois = [];
           failed = true;
+          osmError = errText(e).split("\n")[0];
           notes.push(`OSM: ${errText(e)}`);
         }
       )
@@ -260,11 +268,11 @@ async function refresh() {
   const shown = renderPois();
   const ms = Math.round(performance.now() - started);
   setStatus(
-    zoom >= MIN_POI_ZOOM
-      ? `Obszary: ${zones.length}. BDL: ${bdlPois.length}. OSM: ${osmPois.length}. Na mapie: ${shown}. (${ms} ms)`
-      : `Obszary: ${zones.length}. (${ms} ms)`
+    zoom < MIN_POI_ZOOM
+      ? `Obszary: ${zones.length}. (${ms} ms)`
+      : `Obszary: ${zones.length}. BDL: ${bdlPois.length}. OSM: ${osmError ? `błąd - ${osmError}` : osmPois.length}. Na mapie: ${shown}. (${ms} ms)`
   );
-  if (notes.length) setDebug(notes.join("\n"));
+  if (notes.length) setDebug(notes.join("\n"), failed);
 }
 
 /* ---------------------------------------------------------------- BDL --- */
@@ -371,8 +379,7 @@ out center;`;
 }
 
 async function loadOsm(bounds, signal) {
-  const area = (bounds.getNorth() - bounds.getSouth()) * (bounds.getEast() - bounds.getWest());
-  if (area > MAX_OSM_AREA) {
+  if (areaOf(bounds) > HARD_OSM_AREA) {
     throw new Error("obszar zbyt duży dla Overpass - przybliż mapę");
   }
 
@@ -380,32 +387,94 @@ async function loadOsm(bounds, signal) {
   const key = `osm:${q}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.ts < CACHE_TTL) {
-    return { items: hit.data, endpoint: "cache", tried: [] };
+    return { items: hit.data, endpoint: "pamięć podręczna", tried: [] };
   }
 
   const order = [
     ...(overpassPreferred ? [overpassPreferred] : []),
     ...OVERPASS_ENDPOINTS.filter((u) => u !== overpassPreferred),
   ];
-  const tried = [];
 
-  for (const url of order) {
-    try {
-      const data = await postForm(url, { data: q }, signal, 20000);
-      // HTTP 200 z zerem elementów to poprawna odpowiedź, a nie awaria -
-      // nie wolno przez nią przechodzić do kolejnych serwerów.
-      const items = unique((data.elements || []).map(normalizeOsm).filter(Boolean));
-      cacheSet(key, items);
-      rememberEndpoint(url);
-      return { items, endpoint: url, tried };
-    } catch (e) {
-      if (signal?.aborted) throw e;
-      tried.push(`${url}: ${errText(e)}`);
-      if (overpassPreferred === url) overpassPreferred = null;
-    }
-  }
+  const { data, url, tried } = await raceOverpass(order, q, signal);
+  // HTTP 200 z zerem elementów to poprawna odpowiedź, a nie awaria -
+  // nie wolno przez nią przechodzić do kolejnych serwerów.
+  const items = unique((data.elements || []).map(normalizeOsm).filter(Boolean));
+  cacheSet(key, items);
+  rememberEndpoint(url);
+  return { items, endpoint: url, tried };
+}
 
-  throw new Error(`żaden serwer Overpass nie odpowiedział\n${tried.join("\n")}`);
+// Lustra Overpass regularnie padają albo odbijają zapytanie limitem, więc nie
+// czekamy na każde po kolei: co HEDGE_MS dokładamy kolejne równolegle i bierzemy
+// pierwszą poprawną odpowiedź, a resztę anulujemy.
+function raceOverpass(order, q, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+
+    const local = new AbortController();
+    const onAbort = () => local.abort(signal.reason);
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    const tried = [];
+    let index = 0;
+    let running = 0;
+    let settled = false;
+    let timer = null;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+
+    const launch = () => {
+      if (settled || index >= order.length) return;
+      const url = order[index++];
+      running++;
+
+      askOverpass(url, q, local.signal).then(
+        (data) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          local.abort();
+          resolve({ data, url, tried });
+        },
+        (e) => {
+          running--;
+          if (settled) return;
+          if (signal?.aborted) {
+            settled = true;
+            cleanup();
+            reject(signal.reason);
+            return;
+          }
+          tried.push(`${url}: ${errText(e)}`);
+          if (overpassPreferred === url) overpassPreferred = null;
+          if (index < order.length) launch();
+          else if (running === 0) {
+            settled = true;
+            cleanup();
+            reject(new Error(
+              `żaden z ${order.length} serwerów Overpass nie odpowiedział\n${tried.join("\n")}`
+            ));
+          }
+        }
+      );
+
+      if (index < order.length) {
+        clearTimeout(timer);
+        timer = setTimeout(launch, HEDGE_MS);
+      }
+    };
+
+    launch();
+  });
+}
+
+function askOverpass(url, q, signal) {
+  return url.startsWith("/api/")
+    ? getJson(`${url}?data=${encodeURIComponent(q)}`, signal, OSM_TIMEOUT)
+    : postForm(url, { data: q }, signal, OSM_TIMEOUT);
 }
 
 function normalizeOsm(e) {
@@ -569,7 +638,7 @@ async function postForm(url, body, signal, ms) {
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
     body: new URLSearchParams(body),
   }, signal, ms);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 150).replace(/\s+/g, " ").trim()}`);
   return r.json();
 }
 
@@ -605,12 +674,25 @@ function band(zoom) {
 }
 
 function padBounds(b, f) {
+  if (f <= 0) return b;
   const dLat = (b.getNorth() - b.getSouth()) * f;
   const dLon = (b.getEast() - b.getWest()) * f;
   return L.latLngBounds(
     [b.getSouth() - dLat, b.getWest() - dLon],
     [b.getNorth() + dLat, b.getEast() + dLon]
   );
+}
+
+function areaOf(b) {
+  return (b.getNorth() - b.getSouth()) * (b.getEast() - b.getWest());
+}
+
+// Duży widok dostaje mniejszy margines, zamiast zostać odrzucony.
+function padFor(view) {
+  const area = areaOf(view);
+  if (area <= 0) return PAD;
+  const scale = Math.sqrt(SOFT_OSM_AREA / area);
+  return Math.max(0, Math.min(PAD, (scale - 1) / 2));
 }
 
 function featureBbox(f) {
@@ -654,4 +736,8 @@ function setStatus(s) { statusEl.textContent = s; }
 function showMessage(s) { messageEl.textContent = s; messageEl.classList.remove("hidden"); }
 function hideMessage() { messageEl.classList.add("hidden"); }
 function clearDebug() { debugEl.textContent = ""; debugWrap.classList.add("hidden"); }
-function setDebug(e) { debugEl.textContent = errText(e); debugWrap.classList.remove("hidden"); }
+function setDebug(e, open = false) {
+  debugEl.textContent = errText(e);
+  debugWrap.classList.remove("hidden");
+  if (open) debugWrap.open = true;
+}
