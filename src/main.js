@@ -63,6 +63,14 @@ document.querySelector("#app").innerHTML = `
 <div class="layout">
   <aside class="sidebar">
     <div class="brand"><div class="brand-badge">🌲</div><div><h1>Zanocuj w lesie</h1><p>Obszary programu + punkty z BDL i OpenStreetMap.</p></div></div>
+    <section class="panel search-panel">
+      <div class="search-row">
+        <input id="search" type="search" placeholder="Miasto, gmina, nadleśnictwo..." autocomplete="off" aria-label="Szukaj miejsca">
+        <button id="search-go" type="button" aria-label="Szukaj">Szukaj</button>
+      </div>
+      <ul id="search-results" class="search-results hidden"></ul>
+      <p id="search-note" class="hint hidden"></p>
+    </section>
     <section class="panel"><h2>Pokaż na mapie</h2><div id="filters" class="filters"></div></section>
     <section class="panel stats-panel">
       <div class="stat-row"><span><span class="dot dot-zone"></span> Obszary Zanocuj w lesie</span><strong id="zones">0</strong></div>
@@ -105,6 +113,109 @@ $("#filters").addEventListener("change", (e) => {
 });
 for (const id of ["#src-bdl", "#src-osm", "#only-zone", "#hide-bus"]) {
   $(id).addEventListener("change", renderPois);
+}
+
+/* --------------------------------------------------------- wyszukiwarka --- */
+
+const searchInput = $("#search");
+const searchList = $("#search-results");
+const searchNote = $("#search-note");
+let searchTimer;
+let searchAbort = null;
+let searchHits = [];
+
+searchInput.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  const q = searchInput.value.trim();
+  if (q.length < 3) {
+    hideResults();
+    return;
+  }
+  searchTimer = setTimeout(() => runSearch(q), 400);
+});
+
+searchInput.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { hideResults(); searchInput.blur(); }
+  if (e.key === "Enter") {
+    e.preventDefault();
+    clearTimeout(searchTimer);
+    if (searchHits.length) goTo(searchHits[0]);
+    else runSearch(searchInput.value.trim());
+  }
+});
+
+$("#search-go").addEventListener("click", () => {
+  clearTimeout(searchTimer);
+  const q = searchInput.value.trim();
+  if (q.length >= 3) runSearch(q);
+});
+
+searchList.addEventListener("click", (e) => {
+  const li = e.target.closest("li[data-index]");
+  if (li) goTo(searchHits[Number(li.dataset.index)]);
+});
+
+async function runSearch(q) {
+  if (q.length < 3) return;
+  if (searchAbort) searchAbort.abort();
+  searchAbort = new AbortController();
+
+  note("Szukam...");
+  searchList.classList.add("hidden");
+
+  try {
+    const data = await getJson(`/api/geocode?q=${encodeURIComponent(q)}`, searchAbort.signal, 12000);
+    // W dev proxy oddaje surową tablicę z Nominatima, w produkcji funkcja
+    // serverless pakuje wynik w { results }.
+    const raw = Array.isArray(data) ? data : data.results || [];
+    searchHits = raw
+      .map((r) => ({
+        name: r.name || r.display_name || "",
+        lat: Number(r.lat),
+        lon: Number(r.lon),
+        bbox: Array.isArray(r.bbox || r.boundingbox) ? (r.bbox || r.boundingbox).map(Number) : null,
+      }))
+      .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lon));
+
+    if (!searchHits.length) {
+      note("Brak wyników.");
+      return;
+    }
+
+    searchList.innerHTML = searchHits
+      .map((r, i) => `<li data-index="${i}"><button type="button">${esc(r.name)}</button></li>`)
+      .join("");
+    searchList.classList.remove("hidden");
+    searchNote.classList.add("hidden");
+  } catch (e) {
+    if (searchAbort.signal.aborted) return;
+    note(`Wyszukiwanie nie zadziałało: ${errText(e)}`);
+  }
+}
+
+function goTo(hit) {
+  if (!hit) return;
+  hideResults();
+  searchInput.value = hit.name.split(",")[0];
+
+  if (hit.bbox && hit.bbox.length === 4 && hit.bbox.every(Number.isFinite)) {
+    const [south, north, west, east] = hit.bbox;
+    map.fitBounds([[south, west], [north, east]], { maxZoom: 15 });
+  } else {
+    map.setView([hit.lat, hit.lon], 13);
+  }
+}
+
+function hideResults() {
+  searchHits = [];
+  searchList.classList.add("hidden");
+  searchList.innerHTML = "";
+  searchNote.classList.add("hidden");
+}
+
+function note(text) {
+  searchNote.textContent = text;
+  searchNote.classList.remove("hidden");
 }
 
 // Dymki Leafletu powstają i znikają w locie, więc nasłuch jest delegowany.
