@@ -282,7 +282,11 @@ footer {
   line-height: 1.3;
 }
 
+/* BDL = zielone kółko z etykietą LP, OSM = niebieski kwadrat z etykietą OSM.
+   Kształt i kolor rozróżniają źródło nawet bez czytania etykiety. */
 .marker-bdl {
+  border-color: #1f6b3c;
+  border-radius: 50%;
   box-shadow: 0 2px 12px rgba(25, 92, 50, 0.38);
 }
 
@@ -290,11 +294,63 @@ footer {
   background: #1f6b3c;
 }
 
+.marker-osm {
+  border-color: #2563eb;
+  border-radius: 11px;
+  box-shadow: 0 2px 12px rgba(37, 99, 235, 0.35);
+}
+
 .marker-osm small {
-  background: #4b5563;
+  background: #2563eb;
+}
+
+.poi-marker-inner.in-zone {
+  outline: 2px solid rgba(35, 107, 61, 0.55);
+  outline-offset: 2px;
 }
 
 .source-bdl {
   color: #1f6b3c;
   font-weight: 650;
+}
+
+.source-osm {
+  color: #2563eb;
+  font-weight: 650;
+}
+
+.popup-tags {
+  margin-top: 3px;
+  color: #6b7280;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.popup-zone {
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px #c9d2c7;
+}
+
+.dot-bdl {
+  border-radius: 50%;
+  background: #1f6b3c;
+}
+
+.dot-osm {
+  border-radius: 3px;
+  background: #2563eb;
+}
+
+.hint {
+  margin: 9px 0 0;
+  font-size: 12px;
 }

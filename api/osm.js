@@ -1,7 +1,13 @@
 const OVERPASS_URLS = [
   "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
 ];
+
+// Funkcja serverless musi zdążyć odpowiedzieć w limicie platformy, inaczej
+// przeglądarka dostaje 504 bez treści zamiast czytelnego błędu JSON.
+const TOTAL_BUDGET_MS = 9000;
+const MIN_ATTEMPT_MS = 2500;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -24,44 +30,43 @@ export default async function handler(req, res) {
     return res.status(413).json({ error: "Query too large" });
   }
 
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
   const failures = [];
 
   for (const url of OVERPASS_URLS) {
+    const left = deadline - Date.now();
+    if (left < MIN_ATTEMPT_MS) {
+      failures.push(`${url}: pominięty, zabrakło czasu`);
+      continue;
+    }
+
     try {
       const upstream = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
           Accept: "application/json,text/plain,*/*",
-          Referer: "https://overpass-turbo.eu/",
-          Origin: "https://overpass-turbo.eu",
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+          "User-Agent": "zanocuj-map/0.4 (+https://github.com/CiesliixW/zanocuj-map)",
         },
         body: new URLSearchParams({ data: query }),
-        signal: AbortSignal.timeout(28000),
+        signal: AbortSignal.timeout(left),
       });
 
       if (!upstream.ok) {
         const body = await upstream.text();
-        failures.push(`${url}: HTTP ${upstream.status} ${body.slice(0, 300)}`);
+        failures.push(`${url}: HTTP ${upstream.status} ${body.slice(0, 200)}`);
         continue;
       }
 
       const data = await upstream.json();
 
-      res.setHeader(
-        "Cache-Control",
-        "public, s-maxage=300, stale-while-revalidate=900"
-      );
+      res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=900");
       res.setHeader("X-Overpass-Endpoint", url);
       res.setHeader("X-Overpass-Count", String(data.elements?.length || 0));
 
       return res.status(200).json(data);
     } catch (error) {
-      failures.push(
-        `${url}: ${error instanceof Error ? error.message : String(error)}`
-      );
+      failures.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

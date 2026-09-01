@@ -61,10 +61,13 @@ export default async function handler(req, res) {
   const url = `${SERVICE}/${layer}/query?${params.toString()}`;
 
   try {
+    // Bez własnego limitu zawieszony BDL kończy się platformowym 504 bez
+    // treści; z limitem przeglądarka dostaje czytelny błąd JSON.
     const upstream = await fetch(url, {
       headers: {
         Accept: "application/geo+json,application/json",
       },
+      signal: AbortSignal.timeout(9000),
     });
 
     const text = await upstream.text();
