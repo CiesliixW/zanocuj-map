@@ -6,6 +6,7 @@ import { point } from "@turf/helpers";
 
 const MIN_ZONE_ZOOM = 8;
 const MIN_POI_ZOOM = 10;
+const MIN_TRAIL_ZOOM = 11;
 const PAD = 0.35;
 const HEDGE_MS = 3500;
 const OSM_TIMEOUT = 25000;
@@ -18,6 +19,26 @@ const DEBOUNCE = 250;
 const SOFT_OSM_AREA = 6;
 const HARD_OSM_AREA = 25;
 const MAX_MARKERS = 900;
+
+// Warstwy liniowe BDL. Schematu pól nie znamy, więc pobieramy outFields=*
+// i budujemy dymek z tego, co faktycznie przyszło.
+const TRAIL_LAYERS = [
+  [35, "szlak", "Szlaki turystyczne", "#b45309", null],
+  [34, "sciezka", "Ścieżki dydaktyczne", "#0f766e", "6 4"],
+];
+
+// Szlaki w Polsce znakuje się kolorem; jeśli warstwa niesie taki atrybut,
+// linia dostaje właściwą barwę zamiast domyślnej.
+const TRAIL_COLORS = {
+  czerwony: "#dc2626",
+  niebieski: "#2563eb",
+  zielony: "#16a34a",
+  zolty: "#ca8a04",
+  "żółty": "#ca8a04",
+  czarny: "#1f2937",
+  bialy: "#6b7280",
+  "biały": "#6b7280",
+};
 
 // Zrzut całej Polski leży na tej samej domenie co aplikacja, więc nie zależy
 // od dostępności ani limitów luster Overpass. Overpass zostaje wyłącznie jako
@@ -77,12 +98,15 @@ document.querySelector("#app").innerHTML = `
       <div class="stat-row"><span>Punkty BDL</span><strong id="bdl">0</strong></div>
       <div class="stat-row"><span>Punkty OSM</span><strong id="osm">0</strong></div>
       <div class="stat-row"><span>Pokazane markery</span><strong id="shown">0</strong></div>
+      <div class="stat-row"><span>Szlaki i ścieżki</span><strong id="trails">0</strong></div>
     </section>
     <section class="panel"><h2>Źródła</h2>
       <label class="source-filter"><input id="src-bdl" type="checkbox" checked> <span class="dot dot-bdl"></span> BDL / Lasy Państwowe</label>
       <label class="source-filter"><input id="src-osm" type="checkbox" checked> <span class="dot dot-osm"></span> OpenStreetMap</label>
       <label class="source-filter"><input id="only-zone" type="checkbox"> Tylko wewnątrz obszarów Zanocuj w lesie</label>
       <label class="source-filter"><input id="hide-bus" type="checkbox"> Ukryj wiaty przystankowe (OSM)</label>
+      <label class="source-filter"><input id="trail-35" type="checkbox" data-trail="35"> <span class="dash dash-szlak"></span> Szlaki turystyczne (BDL)</label>
+      <label class="source-filter"><input id="trail-34" type="checkbox" data-trail="34"> <span class="dash dash-sciezka"></span> Ścieżki dydaktyczne (BDL)</label>
       <p class="hint">Punkty z obu baz są pokazywane osobno. Jeśli BDL i OSM opisują to samo miejsce, markery rozsuwają się, żeby oba były klikalne.</p>
     </section>
     <section class="panel info-panel"><h2>Status</h2><p id="status">Przybliż mapę.</p><details id="debug-wrap" class="debug hidden"><summary>Szczegóły</summary><pre id="debug"></pre></details></section>
@@ -113,6 +137,12 @@ $("#filters").addEventListener("change", (e) => {
 });
 for (const id of ["#src-bdl", "#src-osm", "#only-zone", "#hide-bus"]) {
   $(id).addEventListener("change", renderPois);
+}
+
+// Szlaki wymagają pobrania z sieci, więc ich przełączenie musi unieważnić
+// zapamiętany widok, a nie tylko przerysować to, co już jest w pamięci.
+for (const id of ["#trail-35", "#trail-34"]) {
+  $(id).addEventListener("change", () => { loadedFor = null; schedule(); });
 }
 
 /* --------------------------------------------------------- wyszukiwarka --- */
@@ -164,18 +194,22 @@ async function runSearch(q) {
   searchList.classList.add("hidden");
 
   try {
-    const data = await getJson(`/api/geocode?q=${encodeURIComponent(q)}`, searchAbort.signal, 12000);
-    // W dev proxy oddaje surową tablicę z Nominatima, w produkcji funkcja
-    // serverless pakuje wynik w { results }.
-    const raw = Array.isArray(data) ? data : data.results || [];
-    searchHits = raw
-      .map((r) => ({
-        name: r.name || r.display_name || "",
-        lat: Number(r.lat),
-        lon: Number(r.lon),
-        bbox: Array.isArray(r.bbox || r.boundingbox) ? (r.bbox || r.boundingbox).map(Number) : null,
-      }))
-      .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lon));
+    const r = await fetchWithTimeout(
+      `/api/geocode?q=${encodeURIComponent(q)}`, {}, searchAbort.signal, 12000
+    );
+    const data = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      // Treść błędu mówi, który geokoder odmówił i z jakim kodem - bez tego
+      // diagnoza sprowadza się do zgadywania.
+      const detail = Array.isArray(data?.details) ? ` - ${data.details.join(" | ")}` : "";
+      note(`Wyszukiwanie nie zadziałało: ${data?.error || `HTTP ${r.status}`}${detail}`);
+      return;
+    }
+
+    searchHits = (data?.results || []).filter(
+      (h) => Number.isFinite(h.lat) && Number.isFinite(h.lon)
+    );
 
     if (!searchHits.length) {
       note("Brak wyników.");
@@ -285,6 +319,13 @@ const zoneLayer = L.geoJSON(null, {
     layer.bindPopup(`<div class="popup"><strong>${esc(p.nzw_ob || p.inv_nr || "Zanocuj w lesie")}</strong>${p.inv_nr ? `<div>Nr: ${esc(p.inv_nr)}</div>` : ""}</div>`);
   },
 }).addTo(map);
+// Linie pod markerami, żeby nie zasłaniały punktów.
+const trailLayer = L.geoJSON(null, {
+  style: trailStyle,
+  onEachFeature(feature, layer) {
+    layer.bindPopup(trailPopup(feature));
+  },
+}).addTo(map);
 const poiLayer = L.layerGroup().addTo(map);
 
 const cache = new Map();
@@ -292,6 +333,7 @@ let zones = [];
 let zoneBoxes = [];
 let bdlPois = [];
 let osmPois = [];
+let trailCount = 0;
 let loadedFor = null;
 let serial = 0;
 let timer;
@@ -437,6 +479,30 @@ async function refresh() {
     showMessage(`Przybliż do ${MIN_POI_ZOOM}+, żeby zobaczyć wiaty, paleniska i pozostałe punkty.`);
   }
 
+  const wantedTrails = TRAIL_LAYERS.filter(([id]) => $(`#trail-${id}`).checked);
+  if (zoom >= MIN_TRAIL_ZOOM && wantedTrails.length) {
+    jobs.push(
+      loadTrails(wantedTrails, bounds, zoom, controller.signal).then(
+        ({ features, errors }) => {
+          if (id !== serial) return;
+          drawTrails(features);
+          if (errors.length) { failed = true; notes.push(`Szlaki: ${errors.join(" | ")}`); }
+        },
+        (e) => {
+          if (id !== serial) return;
+          drawTrails([]);
+          failed = true;
+          notes.push(`Szlaki: ${errText(e)}`);
+        }
+      )
+    );
+  } else {
+    drawTrails([]);
+    if (wantedTrails.length && zoom < MIN_TRAIL_ZOOM) {
+      showMessage(`Przybliż do ${MIN_TRAIL_ZOOM}+, żeby zobaczyć szlaki.`);
+    }
+  }
+
   await Promise.all(jobs);
   if (id !== serial) return;
 
@@ -539,6 +605,97 @@ function normalizeBdl(feature, layer, kind) {
     if (kind === "rest" && !out.length) add("picnic");
   }
   return out;
+}
+
+/* --------------------------------------------------------------- szlaki --- */
+
+async function loadTrails(wanted, bounds, zoom, signal) {
+  // Linie bywają gęste, więc upraszczamy geometrię tym mocniej, im dalej
+  // jesteśmy - inaczej payload rośnie do megabajtów.
+  const offset = zoom >= 14 ? "0.00002" : zoom >= 12 ? "0.00008" : "0.0002";
+
+  const results = await Promise.allSettled(
+    wanted.map(async ([layer, kind]) => {
+      const features = await loadBdlLayer(layer, bounds, "*", {
+        signal,
+        maxAllowableOffset: offset,
+        geometryPrecision: "5",
+        maxPages: 2,
+      });
+      // Znacznik rodzaju wędruje w properties, bo styl i dymek dostają
+      // wyłącznie feature.
+      for (const f of features) {
+        f.properties = { ...(f.properties || {}), __kind: kind };
+      }
+      return features;
+    })
+  );
+
+  const features = [];
+  const errors = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") features.push(...r.value);
+    else errors.push(`warstwa ${wanted[i][0]}: ${errText(r.reason)}`);
+  });
+  return { features, errors };
+}
+
+function drawTrails(features) {
+  trailLayer.clearLayers();
+  trailCount = features.length;
+  if (features.length) {
+    trailLayer.addData({ type: "FeatureCollection", features });
+  }
+  $("#trails").textContent = trailCount;
+}
+
+function trailStyle(feature) {
+  const p = feature?.properties || {};
+  const spec = TRAIL_LAYERS.find(([, kind]) => kind === p.__kind);
+  const [, , , fallback, dash] = spec || [, , , "#b45309", null];
+  return {
+    color: trailColor(p) || fallback,
+    weight: 3,
+    opacity: 0.85,
+    dashArray: dash,
+    lineCap: "round",
+  };
+}
+
+function trailColor(p) {
+  for (const [key, value] of Object.entries(p)) {
+    if (!/kolor/i.test(key) || typeof value !== "string") continue;
+    const hit = TRAIL_COLORS[value.trim().toLowerCase()];
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Schemat warstw liniowych nie jest nam znany, więc dymek pokazuje pola,
+// które faktycznie przyszły, pomijając techniczne.
+function trailPopup(feature) {
+  const p = { ...(feature?.properties || {}) };
+  const kind = p.__kind;
+  delete p.__kind;
+
+  const spec = TRAIL_LAYERS.find(([, k]) => k === kind);
+  const title = p.nzw_ob || p.nazwa || (spec ? spec[2] : "Szlak");
+
+  const rows = Object.entries(p)
+    .filter(([k, v]) =>
+      !/^(objectid|globalid|shape|se_anno|st_length|st_area)/i.test(k) &&
+      v !== null && v !== "" && typeof v !== "object"
+    )
+    .slice(0, 8)
+    .map(([k, v]) => `<div><span class="popup-key">${esc(k)}</span> ${esc(v)}</div>`)
+    .join("");
+
+  return (
+    `<div class="popup"><strong>🥾 ${esc(title)}</strong>` +
+    `<div class="popup-source source-bdl">Źródło: Bank Danych o Lasach (LP)</div>` +
+    (rows ? `<div class="popup-fields">${rows}</div>` : "") +
+    `</div>`
+  );
 }
 
 /* ---------------------------------------------------------- OpenStreetMap */

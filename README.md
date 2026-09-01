@@ -104,6 +104,23 @@ Przełącznik w prawym górnym rogu mapy, wybór zapamiętywany w `localStorage`
 Na podkładach fotograficznych obszary Zanocuj w lesie dostają jaśniejszy kontur
 i lżejsze wypełnienie, żeby teren pozostał czytelny.
 
+## Szlaki i ścieżki
+
+Dwie warstwy liniowe BDL, domyślnie wyłączone (wymagają osobnego pobrania),
+widoczne od zoomu 11:
+
+- **35 - Szlaki turystyczne**
+- **34 - Ścieżki dydaktyczne** (rysowane linią przerywaną)
+
+Schemat pól tych warstw nie jest udokumentowany, więc pobieramy `outFields=*`,
+a dymek składamy z pól, które faktycznie przyszły, pomijając techniczne
+(`objectid`, `shape_*`, `globalid`). Jeśli warstwa niesie atrybut z kolorem
+znakowania, linia dostaje barwę szlaku (czerwony, niebieski, zielony, żółty,
+czarny); w przeciwnym razie kolor domyślny dla warstwy.
+
+Geometria jest upraszczana tym mocniej, im dalej jesteśmy - inaczej payload
+linii rośnie do megabajtów.
+
 ## Warstwy BDL
 
 - 0 - obszary Zanocuj w lesie (poligony)
@@ -115,6 +132,8 @@ i lżejsze wypełnienie, żeby teren pozostał czytelny.
 - 19 - miejsca postoju pojazdów
 - 25 - punkty widokowe
 - 27 - inne punktowe obiekty rekreacyjne
+- 34 - ścieżki dydaktyczne (linie)
+- 35 - szlaki turystyczne (linie)
 
 ## Wydajność
 
