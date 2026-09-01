@@ -79,6 +79,19 @@ liczy się pierwsza poprawna odpowiedź - reszta zostaje anulowana. Serwer, któ
 wygrał, zapamiętuje się w `localStorage` i następnym razem startuje pierwszy.
 Proxy odpytywane jest metodą GET, żeby CDN mógł cache'ować odpowiedź (24 h).
 
+## Wyszukiwarka miejsc
+
+Pole u góry panelu przyjmuje nazwę miasta, gminy czy nadleśnictwa i przenosi
+mapę w to miejsce. Podpowiedzi pojawiają się od trzeciego znaku, z odstępem
+400 ms, Enter wybiera pierwszy wynik, Escape zamyka listę. Wynik z ramką
+granic dostaje `fitBounds`, punktowy - `setView` na zoomie 13.
+
+Geokoderem jest Nominatim, odpytywany **przez własne proxy** `/api/geocode`,
+a nie wprost z przeglądarki: Nominatim wymaga nagłówka `User-Agent`
+identyfikującego aplikację, którego przeglądarka ustawić nie może, a przy
+okazji odpowiedzi cache'ują się na CDN (24 h), co mieści się w limicie jednego
+zapytania na sekundę. Wyniki są zawężone do Polski.
+
 ## Podkłady mapy
 
 Przełącznik w prawym górnym rogu mapy, wybór zapamiętywany w `localStorage`:

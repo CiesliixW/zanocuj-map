@@ -17,6 +17,24 @@ export default defineConfig({
           return `${BDL_SERVICE.replace("https://mapserver.bdl.lasy.gov.pl", "")}/${layer}/query?${url.searchParams.toString()}`;
         },
       },
+      // W dev nie ma funkcji serverless, więc proxy musi samo dołożyć
+      // parametry, które w produkcji ustawia api/geocode.js.
+      "/api/geocode": {
+        target: "https://nominatim.openstreetmap.org",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => {
+          const url = new URL(path, "http://localhost");
+          const params = new URLSearchParams({
+            q: url.searchParams.get("q") || "",
+            format: "jsonv2",
+            limit: "6",
+            countrycodes: "pl",
+            "accept-language": "pl",
+          });
+          return `/search?${params.toString()}`;
+        },
+      },
       "/api/osm": {
         target: "https://overpass-api.de",
         changeOrigin: true,
