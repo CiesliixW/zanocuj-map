@@ -38,8 +38,16 @@ natychmiast po wczytaniu pliku.
 
 Zrzut generuje workflow **Zrzut danych OSM** (`.github/workflows/osm-snapshot.yml`),
 uruchamiany **ręcznie** z zakładki Actions - wiaty i paleniska zmieniają się na
-tyle rzadko, że nie ma sensu odświeżać ich z harmonogramu. Workflow odpytuje
-Overpass kaflami po 1,5 stopnia, składa wynik i commituje plik do repozytorium.
+tyle rzadko, że nie ma sensu odświeżać ich z harmonogramu.
+
+Skrypt `scripts/fetch-osm.mjs` przechodzi Polskę 66 kaflami po 1 stopniu i
+zawęża wyniki filtrem obszarowym `area["ISO3166-1"="PL"]`, żeby nie ściągać
+Czech, Niemiec i Słowacji, które w narożnikach kafli potrafią oddać więcej
+punktów niż sama Polska. Lustro, które zaczyna się sypać, spada na koniec
+kolejki, każdy kafel ma 8 prób z narastającym odstępem, a kafle nieudane
+wracają do drugiego podejścia. Plik powstaje tylko wtedy, gdy **wszystkie**
+kafle się powiodły - inaczej zrzut nie jest nadpisywany, żeby nie zostawić
+dziur w danych.
 
 Format jest krotkowy, żeby plik był możliwie mały:
 `[lat, lon, typ, wiataPrzystankowa, typOsm, idOsm, nazwa]`.
