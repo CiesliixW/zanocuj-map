@@ -10,13 +10,17 @@ const TOTAL_BUDGET_MS = 9000;
 const MIN_ATTEMPT_MS = 2500;
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
+  if (req.method !== "POST" && req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   let query = null;
 
-  if (typeof req.body === "string") {
+  // GET pozwala CDN Vercela cache'ować odpowiedź; POST zostaje dla zgodności.
+  if (req.method === "GET") {
+    const q = req.query?.data;
+    query = Array.isArray(q) ? q[0] : q || null;
+  } else if (typeof req.body === "string") {
     query = new URLSearchParams(req.body).get("data");
   } else if (req.body && typeof req.body === "object") {
     query = req.body.data || req.body.query || null;
@@ -60,7 +64,9 @@ export default async function handler(req, res) {
 
       const data = await upstream.json();
 
-      res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=900");
+      // Wiaty i paleniska zmieniają się rzadko - długi cache zdejmuje ruch
+      // z luster Overpass i sprawia, że powtórne widoki są natychmiastowe.
+      res.setHeader("Cache-Control", "public, s-maxage=86400, stale-while-revalidate=604800");
       res.setHeader("X-Overpass-Endpoint", url);
       res.setHeader("X-Overpass-Count", String(data.elements?.length || 0));
 

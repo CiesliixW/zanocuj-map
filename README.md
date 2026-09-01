@@ -43,10 +43,15 @@ Dokładnie to, które działa w overpass-turbo:
 out center;
 ```
 
-Kolejność serwerów: `overpass-api.de`, `overpass.kumi.systems`,
-`overpass.private.coffee`, a na końcu własne proxy `/api/osm`. Serwer, który
-odpowiedział jako pierwszy, zapamiętywany jest w `localStorage` i przy kolejnych
-zapytaniach próbowany jako pierwszy.
+Kolejność serwerów: `overpass.kumi.systems`, `overpass-api.de`,
+`overpass.private.coffee`, a na końcu własne proxy `/api/osm` (jedyna droga,
+gdy przeglądarka blokuje bezpośrednie zapytania przez CORS).
+
+Lustra Overpass regularnie padają albo odbijają zapytanie limitem, więc nie
+czekamy na każde po kolei: co 3,5 s dokładane jest kolejne **równolegle**, a
+liczy się pierwsza poprawna odpowiedź - reszta zostaje anulowana. Serwer, który
+wygrał, zapamiętuje się w `localStorage` i następnym razem startuje pierwszy.
+Proxy odpytywane jest metodą GET, żeby CDN mógł cache'ować odpowiedź (24 h).
 
 ## Warstwy BDL
 
@@ -79,6 +84,11 @@ Pozycja mapy zapisuje się w adresie jako `#zoom/lat/lon`, np.
 
 - zoom 8+ - obszary Zanocuj w lesie
 - zoom 10+ - punkty BDL i OSM
+
+Margines pobierania zwęża się automatycznie przy dużym widoku, tak żeby bbox dla
+Overpass mieścił się w rozsądnym budżecie. Zapytanie jest odrzucane dopiero, gdy
+sam widok przekracza 25 deg2, co przy zoomie 10+ nie zdarza się na żadnym
+realnym ekranie.
 
 ## Deploy
 
