@@ -1,64 +1,50 @@
-# Zanocuj Map v2
+# Zanocuj Map v3
 
-Wersja poprawiona pod Vercel.
+Ta wersja pokazuje infrastrukturę z dwóch niezależnych źródeł:
 
-## Najważniejsza zmiana
+1. BDL / Lasy Państwowe
+2. OpenStreetMap / Overpass
 
-Aplikacja nie pobiera już wszystkich poligonów programu z całej Polski przez jedną funkcję Vercela.
+## Co zostało poprawione
 
-Zamiast tego:
-1. od zoomu 8 pobiera z BDL tylko poligony przecinające aktualny widok mapy,
-2. od zoomu 11 pobiera POI z Overpass,
-3. Turf.js zostawia tylko POI znajdujące się wewnątrz pobranych poligonów.
+Poprzednia wersja pobierała z BDL tylko poligony "Zanocuj w lesie", a markerów
+wiat, palenisk itd. szukała wyłącznie w OSM.
 
-To znacząco zmniejsza odpowiedzi funkcji Vercela.
+W v3 pobierane są również oficjalne punktowe warstwy BDL:
 
-## Źródło BDL
+- 5 - schroniska leśne
+- 6 - miejsca biwakowania
+- 15 - miejsca wypoczynku
+- 17 - parkingi leśne
+- 19 - miejsca postoju pojazdów
+- 25 - punkty widokowe
+- 27 - inne punktowe obiekty rekreacyjne
 
-Używana jest aktualna warstwa:
+Warstwa 15 zawiera m.in. pola:
 
-`Czas_w_las/WFS_BDL_czas_w_las/MapServer/0`
-
-czyli:
-`Obszar programu Zanocuj w Lesie - ob. powierzchniowy`
-
-Warstwa ma również pola m.in.:
 - wiata
 - lawostoly
 - palenisko
+- parking
 - toalety_tm
+- toalety_st
+- woda_pitna
 - kuchenka
 
-Te informacje są pokazane w popupie obszaru, gdy BDL oznaczy je jako dostępne.
+Punkty BDL oraz OSM są następnie filtrowane przez granice programu
+"Zanocuj w lesie".
 
-## Lokalnie
+## Markery
 
-```bash
-npm install
-npm run dev
-```
+Marker ma małą etykietę:
 
-## Vercel
+- `LP` - oficjalny punkt z Banku Danych o Lasach
+- `OSM` - punkt z OpenStreetMap
 
-Zaimportuj repo.
+Źródła można niezależnie włączać i wyłączać.
 
-```text
-Framework Preset: Vite
-Build Command: npm run build
-Output Directory: dist
-Install Command: npm install
-```
+## Deploy
 
-Environment Variables: brak.
+Vercel może być podpięty bezpośrednio do tego repozytorium. Po każdym pushu na `main` zrobi redeploy automatycznie.
 
-## Aktualizacja istniejącego projektu
-
-Możesz po prostu zastąpić pliki w dotychczasowym repo plikami z tej wersji i zrobić:
-
-```bash
-git add .
-git commit -m "Fix BDL loading"
-git push
-```
-
-Vercel zrobi redeploy automatycznie.
+Nie są potrzebne żadne klucze API ani Environment Variables.
