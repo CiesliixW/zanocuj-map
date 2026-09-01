@@ -36,8 +36,7 @@ document.querySelector("#app").innerHTML = `
     <section class="panel stats-panel">
       <div class="stat-row"><span>Obszary w widoku</span><strong id="zones">0</strong></div>
       <div class="stat-row"><span>Punkty BDL</span><strong id="bdl">0</strong></div>
-      <div class="stat-row"><span>OSM w widoku</span><strong id="osm-raw">0</strong></div>
-      <div class="stat-row"><span>OSM w Zanocuj</span><strong id="osm">0</strong></div>
+      <div class="stat-row"><span>Punkty OSM</span><strong id="osm">0</strong></div>
       <div class="stat-row"><span>Pokazane markery</span><strong id="shown">0</strong></div>
     </section>
     <section class="panel"><h2>Źródła</h2>
@@ -142,7 +141,7 @@ async function refresh() {
 
     if (osmResult.status === "fulfilled") {
       osmRaw = osmResult.value;
-      osmPois = osmRaw.filter(insideZone);
+      osmPois = osmRaw;
     } else {
       osmRaw = [];
       osmPois = [];
@@ -150,7 +149,7 @@ async function refresh() {
     }
 
     renderPois();
-    setStatus(`Obszary: ${zones.length}. BDL: ${bdlPois.length}. OSM w widoku: ${osmRaw.length}. OSM w Zanocuj: ${osmPois.length}.`);
+    setStatus(`Obszary: ${zones.length}. BDL: ${bdlPois.length}. OSM: ${osmPois.length}.`);
     if (errors.length) setDebug(errors.join("\n\n"));
     else if (!osmRaw.length) setDebug("Overpass zwrócił 0 obiektów dla aktualnego widoku mapy.");
   } catch (e) {
@@ -314,7 +313,6 @@ function renderPois() {
 function updateCounts(shown = null) {
   $("#zones").textContent = zones.length;
   $("#bdl").textContent = bdlPois.length;
-  $("#osm-raw").textContent = osmRaw.length;
   $("#osm").textContent = osmPois.length;
   $("#shown").textContent = shown ?? [...bdlPois, ...osmPois].length;
 }
