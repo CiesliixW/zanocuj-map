@@ -354,3 +354,35 @@ footer {
   margin: 9px 0 0;
   font-size: 12px;
 }
+
+.popup-coords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid #e5e9e3;
+}
+
+.popup-coords code {
+  border-radius: 5px;
+  background: #f1f4ef;
+  padding: 2px 5px;
+  font-size: 12px;
+  user-select: all;
+}
+
+.copy-coords {
+  padding: 2px 8px;
+  border: 1px solid #c9d2c7;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.copy-coords:hover {
+  border-color: #1f6b3c;
+  color: #1f6b3c;
+}
