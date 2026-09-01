@@ -397,3 +397,11 @@ footer {
   margin-right: 4px;
   vertical-align: -1px;
 }
+
+/* Na zdjęciach lotniczych ciemne tło zjada cienką obwódkę, więc obszar dostaje
+   jaśniejszy kontur i lżejsze wypełnienie, żeby teren był nadal czytelny. */
+body.on-imagery .leaflet-overlay-pane path {
+  stroke: #e9d5ff;
+  stroke-width: 3;
+  fill-opacity: 0.22;
+}
