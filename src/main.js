@@ -36,7 +36,8 @@ document.querySelector("#app").innerHTML = `
     <section class="panel stats-panel">
       <div class="stat-row"><span>Obszary w widoku</span><strong id="zones">0</strong></div>
       <div class="stat-row"><span>Punkty BDL</span><strong id="bdl">0</strong></div>
-      <div class="stat-row"><span>Punkty OSM</span><strong id="osm">0</strong></div>
+      <div class="stat-row"><span>OSM w widoku</span><strong id="osm-raw">0</strong></div>
+      <div class="stat-row"><span>OSM w Zanocuj</span><strong id="osm">0</strong></div>
       <div class="stat-row"><span>Pokazane markery</span><strong id="shown">0</strong></div>
     </section>
     <section class="panel"><h2>Źródła</h2>
@@ -89,6 +90,7 @@ const poiLayer = L.layerGroup().addTo(map);
 
 let zones = [];
 let bdlPois = [];
+let osmRaw = [];
 let osmPois = [];
 let serial = 0;
 let timer;
@@ -105,7 +107,7 @@ async function refresh() {
   const zoom = map.getZoom();
   if (zoom < MIN_ZONE_ZOOM) {
     serial++;
-    zones = []; bdlPois = []; osmPois = [];
+    zones = []; bdlPois = []; osmRaw = []; osmPois = [];
     zoneLayer.clearLayers(); poiLayer.clearLayers(); updateCounts();
     setStatus(`Przybliż mapę do zoomu ${MIN_ZONE_ZOOM}.`);
     showMessage(`Zoom ${MIN_ZONE_ZOOM}+ pokaże obszary Zanocuj w lesie.`);
@@ -124,7 +126,7 @@ async function refresh() {
     updateCounts();
 
     if (zoom < MIN_POI_ZOOM) {
-      bdlPois = []; osmPois = []; renderPois();
+      bdlPois = []; osmRaw = []; osmPois = []; renderPois();
       setStatus(`Wczytano ${zones.length} obszarów. Zoom ${MIN_POI_ZOOM}+ wczyta infrastrukturę.`);
       showMessage(`Przybliż do ${MIN_POI_ZOOM}+, żeby zobaczyć wiaty, paleniska i pozostałe POI.`);
       return;
@@ -138,15 +140,22 @@ async function refresh() {
     if (bdlResult.status === "fulfilled") bdlPois = bdlResult.value.filter(insideZone);
     else { bdlPois = []; errors.push(`BDL POI: ${errText(bdlResult.reason)}`); }
 
-    if (osmResult.status === "fulfilled") osmPois = osmResult.value.filter(insideZone);
-    else { osmPois = []; errors.push(`OSM: ${errText(osmResult.reason)}`); }
+    if (osmResult.status === "fulfilled") {
+      osmRaw = osmResult.value;
+      osmPois = osmRaw.filter(insideZone);
+    } else {
+      osmRaw = [];
+      osmPois = [];
+      errors.push(`OSM: ${errText(osmResult.reason)}`);
+    }
 
     renderPois();
-    setStatus(`Obszary: ${zones.length}. Punkty w ich granicach: BDL ${bdlPois.length}, OSM ${osmPois.length}.`);
+    setStatus(`Obszary: ${zones.length}. BDL: ${bdlPois.length}. OSM w widoku: ${osmRaw.length}. OSM w Zanocuj: ${osmPois.length}.`);
     if (errors.length) setDebug(errors.join("\n\n"));
+    else if (!osmRaw.length) setDebug("Overpass zwrócił 0 obiektów dla aktualnego widoku mapy.");
   } catch (e) {
     if (id !== serial) return;
-    zones = []; bdlPois = []; osmPois = [];
+    zones = []; bdlPois = []; osmRaw = []; osmPois = [];
     zoneLayer.clearLayers(); poiLayer.clearLayers(); updateCounts();
     setStatus("Nie udało się pobrać danych dla tego widoku.");
     setDebug(e);
@@ -212,24 +221,49 @@ async function loadOsm(bounds) {
   const bbox = [bounds.getSouth(), bounds.getWest(), bounds.getNorth(), bounds.getEast()].join(",");
   const q = `
 [out:json][timeout:30];
-
 (
   nwr["amenity"="shelter"](${bbox});
   nwr["tourism"="picnic_site"](${bbox});
   nwr["leisure"="firepit"](${bbox});
 );
-
-out center;
+out center tags;
   `.trim();
 
-  const r = await fetch("/api/osm", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-    body: new URLSearchParams({ data: q }),
-  });
-  if (!r.ok) throw new Error(`Overpass HTTP ${r.status}: ${await r.text()}`);
-  const data = await r.json();
-  return unique((data.elements || []).map(normalizeOsm).filter(Boolean));
+  const attempts = [
+    ["https://overpass.private.coffee/api/interpreter", false],
+    ["/api/osm", true],
+    ["https://overpass-api.de/api/interpreter", false],
+  ];
+  const errors = [];
+
+  for (const [url] of attempts) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 28000);
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body: new URLSearchParams({ data: q }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!r.ok) {
+        errors.push(`${url}: HTTP ${r.status}`);
+        continue;
+      }
+
+      const data = await r.json();
+      const items = unique((data.elements || []).map(normalizeOsm).filter(Boolean));
+      if (items.length) return items;
+      errors.push(`${url}: 0 wyników`);
+    } catch (e) {
+      errors.push(`${url}: ${errText(e)}`);
+    }
+  }
+
+  if (errors.length) throw new Error(errors.join("\n"));
+  return [];
 }
 
 function normalizeOsm(e) {
@@ -238,17 +272,22 @@ function normalizeOsm(e) {
   const lat = e.lat ?? e.center?.lat;
   const lon = e.lon ?? e.center?.lon;
   if (typeof lat !== "number" || typeof lon !== "number") return null;
+
   let type = null;
   if (t.leisure === "firepit") type = "firepit";
   else if (t.amenity === "shelter") type = "shelter";
   else if (t.tourism === "picnic_site") type = "picnic";
   if (!type) return null;
+
   return { id: `OSM:${e.type}/${e.id}`, source: "OSM", osmType: e.type, osmId: e.id, lat, lon, type, name: t.name || null };
 }
 
 function insideZone(poi) {
   const p = point([poi.lon, poi.lat]);
-  return zones.some((z) => { try { return booleanPointInPolygon(p, z); } catch { return false; } });
+  return zones.some((z) => {
+    try { return booleanPointInPolygon(p, z); }
+    catch { return false; }
+  });
 }
 
 function renderPois() {
@@ -275,6 +314,7 @@ function renderPois() {
 function updateCounts(shown = null) {
   $("#zones").textContent = zones.length;
   $("#bdl").textContent = bdlPois.length;
+  $("#osm-raw").textContent = osmRaw.length;
   $("#osm").textContent = osmPois.length;
   $("#shown").textContent = shown ?? [...bdlPois, ...osmPois].length;
 }
