@@ -10,6 +10,8 @@ const ALLOWED_LAYERS = new Set([
   "19",  // Miejsca postoju pojazdów - points
   "25",  // Punkty widokowe - points
   "27",  // Inne punktowe obiekty rekreacyjne - points
+  "34",  // Ścieżki dydaktyczne - lines
+  "35",  // Szlaki turystyczne - lines
 ]);
 
 const ALLOWED_PARAMS = new Set([

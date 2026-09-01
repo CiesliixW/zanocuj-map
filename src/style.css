@@ -468,3 +468,31 @@ body.on-imagery .leaflet-overlay-pane path {
 .search-results button:hover {
   background: #f1f6ef;
 }
+
+.dash {
+  display: inline-block;
+  width: 16px;
+  height: 3px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+}
+
+.dash-szlak { background: #b45309; }
+
+.dash-sciezka {
+  background: repeating-linear-gradient(90deg, #0f766e 0 5px, transparent 5px 8px);
+}
+
+.popup-fields {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #e5e9e3;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.popup-key {
+  color: #6b7280;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
