@@ -1,5 +1,16 @@
-const BDL_URL =
-  "https://mapserver.bdl.lasy.gov.pl/arcgis/rest/services/Czas_w_las/WFS_BDL_czas_w_las/MapServer/0/query";
+const SERVICE =
+  "https://mapserver.bdl.lasy.gov.pl/arcgis/rest/services/Czas_w_las/WFS_BDL_czas_w_las/MapServer";
+
+const ALLOWED_LAYERS = new Set([
+  "0",   // Zanocuj w lesie polygons
+  "5",   // Schroniska leśne - points
+  "6",   // Miejsca biwakowania - points
+  "15",  // Miejsca wypoczynku - points
+  "17",  // Parkingi leśne - points
+  "19",  // Miejsca postoju pojazdów - points
+  "25",  // Punkty widokowe - points
+  "27",  // Inne punktowe obiekty rekreacyjne - points
+]);
 
 const ALLOWED_PARAMS = new Set([
   "where",
@@ -22,10 +33,18 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const layer = String(req.query?.layer ?? "0");
+
+  if (!ALLOWED_LAYERS.has(layer)) {
+    return res.status(400).json({ error: "Unsupported BDL layer" });
+  }
+
   const params = new URLSearchParams();
 
   for (const [key, value] of Object.entries(req.query || {})) {
+    if (key === "layer") continue;
     if (!ALLOWED_PARAMS.has(key)) continue;
+
     if (Array.isArray(value)) {
       if (value.length) params.set(key, String(value[0]));
     } else if (value !== undefined && value !== null) {
@@ -37,52 +56,57 @@ export default async function handler(req, res) {
   if (!params.has("f")) params.set("f", "geojson");
   if (!params.has("returnGeometry")) params.set("returnGeometry", "true");
   if (!params.has("outSR")) params.set("outSR", "4326");
-  if (!params.has("resultRecordCount")) params.set("resultRecordCount", "250");
+  if (!params.has("resultRecordCount")) params.set("resultRecordCount", "500");
+
+  const url = `${SERVICE}/${layer}/query?${params.toString()}`;
 
   try {
-    const upstream = await fetch(`${BDL_URL}?${params.toString()}`, {
+    const upstream = await fetch(url, {
       headers: {
         Accept: "application/geo+json,application/json",
       },
     });
 
-    const contentType = upstream.headers.get("content-type") || "";
+    const text = await upstream.text();
 
     if (!upstream.ok) {
-      const body = await upstream.text();
       return res.status(upstream.status).json({
         error: "BDL request failed",
+        layer,
         status: upstream.status,
-        details: body.slice(0, 1000),
+        details: text.slice(0, 1200),
       });
     }
 
-    if (!contentType.includes("json") && !contentType.includes("geo")) {
-      const body = await upstream.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
       return res.status(502).json({
         error: "BDL returned a non-JSON response",
-        details: body.slice(0, 1000),
+        layer,
+        details: text.slice(0, 1200),
       });
     }
-
-    const data = await upstream.json();
 
     if (data?.error) {
       return res.status(502).json({
         error: "BDL ArcGIS error",
+        layer,
         details: data.error,
       });
     }
 
     res.setHeader(
       "Cache-Control",
-      "public, s-maxage=3600, stale-while-revalidate=86400"
+      "public, s-maxage=1800, stale-while-revalidate=86400"
     );
 
     return res.status(200).json(data);
   } catch (error) {
     return res.status(502).json({
       error: "Could not reach BDL",
+      layer,
       details: error instanceof Error ? error.message : String(error),
     });
   }
