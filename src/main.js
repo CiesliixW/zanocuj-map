@@ -34,6 +34,7 @@ const OVERPASS_ENDPOINTS = [
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.openstreetmap.fr/api/interpreter",
   "/api/osm",
 ];
 
