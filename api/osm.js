@@ -1,7 +1,6 @@
 const OVERPASS_URLS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
-  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ];
 
 export default async function handler(req, res) {
@@ -33,8 +32,11 @@ export default async function handler(req, res) {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          Accept: "application/json",
-          "User-Agent": "zanocuj-map/0.4 (+https://github.com/CiesliixW/zanocuj-map)",
+          Accept: "application/json,text/plain,*/*",
+          Referer: "https://overpass-turbo.eu/",
+          Origin: "https://overpass-turbo.eu",
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
         },
         body: new URLSearchParams({ data: query }),
         signal: AbortSignal.timeout(28000),
@@ -42,7 +44,7 @@ export default async function handler(req, res) {
 
       if (!upstream.ok) {
         const body = await upstream.text();
-        failures.push(`${url}: HTTP ${upstream.status} ${body.slice(0, 250)}`);
+        failures.push(`${url}: HTTP ${upstream.status} ${body.slice(0, 300)}`);
         continue;
       }
 
@@ -53,6 +55,7 @@ export default async function handler(req, res) {
         "public, s-maxage=300, stale-while-revalidate=900"
       );
       res.setHeader("X-Overpass-Endpoint", url);
+      res.setHeader("X-Overpass-Count", String(data.elements?.length || 0));
 
       return res.status(200).json(data);
     } catch (error) {
