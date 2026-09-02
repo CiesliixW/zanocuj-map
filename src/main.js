@@ -70,14 +70,25 @@ const TYPES = {
   viewpoint: ["Punkty widokowe", "👁️"],
 };
 
+const AMENITY_FIELDS =
+  "objectid,nzw_ob,adres,link,wiata,lawostoly,palenisko,parking,toalety_tm,toalety_st,woda_pitna,kuchenka";
+const BASIC_FIELDS = "objectid,nzw_ob,adres,link";
+
+// [warstwa, typ filtru, pola, nazwa warstwy do dymka]
+// Czwarta kolumna jest po to, że kilka warstw wpada pod jeden filtr: pod
+// "Miejsca biwakowe" idą cztery różne rodzaje obiektów i w dymku ma być
+// widać, który to konkretnie.
 const BDL_LAYERS = [
-  [15, "rest", "objectid,nzw_ob,adres,link,wiata,lawostoly,palenisko,parking,toalety_tm,toalety_st,woda_pitna,kuchenka"],
-  [5, "shelter", "objectid,nzw_ob,adres,link"],
-  [6, "campsite", "objectid,nzw_ob,adres,link"],
-  [17, "parking", "objectid,nzw_ob,adres,link"],
-  [19, "parking", "objectid,nzw_ob,adres,link"],
-  [25, "viewpoint", "objectid,nzw_ob,adres,link"],
-  [27, "other", "objectid,nzw_ob,adres,link,wiata,lawostoly,palenisko,parking,toalety_tm,toalety_st,woda_pitna,kuchenka"],
+  [15, "rest", AMENITY_FIELDS, "Miejsce wypoczynku"],
+  [5, "shelter", BASIC_FIELDS, "Schronisko leśne"],
+  [6, "campsite", BASIC_FIELDS, "Miejsce biwakowania"],
+  [8, "campsite", BASIC_FIELDS, "Pole biwakowe"],
+  [10, "campsite", BASIC_FIELDS, "Kemping"],
+  [12, "campsite", BASIC_FIELDS, "Obozowisko harcerskie"],
+  [17, "parking", BASIC_FIELDS, "Parking leśny"],
+  [19, "parking", BASIC_FIELDS, "Miejsce postoju pojazdów"],
+  [25, "viewpoint", BASIC_FIELDS, "Punkt widokowy"],
+  [27, "other", AMENITY_FIELDS, "Obiekt rekreacyjny"],
 ];
 
 document.querySelector("#app").innerHTML = `
@@ -534,13 +545,13 @@ function loadZones(bounds, zoom, signal) {
 
 async function loadBdlPois(bounds, signal) {
   const results = await Promise.allSettled(
-    BDL_LAYERS.map(async ([layer, kind, fields]) => {
+    BDL_LAYERS.map(async ([layer, kind, fields, label]) => {
       const features = await loadBdlLayer(layer, bounds, fields, {
         signal,
         geometryPrecision: "6",
         maxPages: 2,
       });
-      return features.flatMap((f) => normalizeBdl(f, layer, kind));
+      return features.flatMap((f) => normalizeBdl(f, layer, kind, label));
     })
   );
 
@@ -582,7 +593,7 @@ async function loadBdlLayer(layer, bounds, fields, opts) {
   return out;
 }
 
-function normalizeBdl(feature, layer, kind) {
+function normalizeBdl(feature, layer, kind, label) {
   const c = feature.geometry?.coordinates;
   if (!Array.isArray(c) || typeof c[0] !== "number" || typeof c[1] !== "number") return [];
   const p = feature.properties || {};
@@ -592,9 +603,13 @@ function normalizeBdl(feature, layer, kind) {
   };
   const idBase = `${layer}:${p.objectid ?? c.join(",")}`;
   const out = [];
-  const add = (type) => out.push({ ...base, id: `BDL:${idBase}:${type}`, type });
+  // Etykieta warstwy pasuje tylko tam, gdzie warstwa odpowiada typowi wprost.
+  // Punkt wyprowadzony z flagi udogodnienia (palenisko przy miejscu
+  // wypoczynku) opisuje samo udogodnienie, a nie warstwę, z której pochodzi.
+  const add = (type, layerLabel = null) =>
+    out.push({ ...base, id: `BDL:${idBase}:${type}`, type, layerLabel });
 
-  if (["shelter", "campsite", "parking", "viewpoint"].includes(kind)) add(kind);
+  if (["shelter", "campsite", "parking", "viewpoint"].includes(kind)) add(kind, label);
   if (kind === "rest" || kind === "other") {
     if (yes(p.wiata)) add("shelter");
     if (yes(p.palenisko)) add("firepit");
@@ -602,7 +617,7 @@ function normalizeBdl(feature, layer, kind) {
     if (yes(p.woda_pitna)) add("water");
     if (yes(p.toalety_tm) || yes(p.toalety_st)) add("toilets");
     if (yes(p.parking)) add("parking");
-    if (kind === "rest" && !out.length) add("picnic");
+    if (kind === "rest" && !out.length) add("picnic", label);
   }
   return out;
 }
@@ -948,8 +963,8 @@ function buildMarker(p) {
 
   marker.bindPopup(
     `<div class="popup">` +
-      `<strong>${emoji} ${esc(p.name || label)}</strong>` +
-      `<div>${esc(label)}</div>` +
+      `<strong>${emoji} ${esc(p.name || p.layerLabel || label)}</strong>` +
+      `<div>${esc(p.layerLabel || label)}</div>` +
       `<div class="popup-source ${p.source === "BDL" ? "source-bdl" : "source-osm"}">Źródło: ${p.source === "BDL" ? "Bank Danych o Lasach (LP)" : "OpenStreetMap"}</div>` +
       (p.tagLine ? `<div class="popup-tags">${esc(p.tagLine)}</div>` : "") +
       (p.address ? `<div>${esc(p.address)}</div>` : "") +

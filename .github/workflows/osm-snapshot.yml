@@ -3,6 +3,11 @@ name: Zrzut danych OSM
 # Uruchamiany ręcznie. Dane o wiatach i paleniskach zmieniają się na tyle
 # rzadko, że nie ma sensu odświeżać ich z harmonogramu - wystarczy powtórzyć
 # ten workflow, kiedy zrzut się zestarzeje.
+#
+# Źródłem jest gotowy zrzut Polski z Geofabriku, a nie Overpass. Overpass służy
+# do małych zapytań na żywo; przy 66 kaflach całego kraju lustra odbijają ruch
+# limitami i przebieg ciągnie się godzinami. Tutaj pobranie i przefiltrowanie
+# to kilka minut, deterministycznie i bez zależności od cudzych serwerów.
 on:
   workflow_dispatch:
 
@@ -12,7 +17,7 @@ permissions:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -21,8 +26,37 @@ jobs:
         with:
           node-version: 22
 
-      - name: Pobierz punkty z Overpass
-        run: node scripts/fetch-osm.mjs
+      - name: Zainstaluj osmium
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends osmium-tool
+          osmium --version
+
+      - name: Pobierz zrzut Polski z Geofabriku
+        run: |
+          curl -fSL --retry 5 --retry-delay 10 --retry-all-errors \
+            -o poland.osm.pbf \
+            https://download.geofabrik.de/europe/poland-latest.osm.pbf
+          ls -lh poland.osm.pbf
+
+      - name: Wytnij interesujące obiekty
+        run: |
+          # tags-filter domyślnie dociąga obiekty referencyjne, więc linie
+          # i wielokąty zachowują geometrię potrzebną do policzenia środka.
+          osmium tags-filter poland.osm.pbf \
+            nwr/amenity=shelter \
+            nwr/tourism=picnic_site \
+            nwr/leisure=firepit \
+            -o filtered.osm.pbf --overwrite
+          ls -lh filtered.osm.pbf
+
+      - name: Zbuduj zrzut aplikacji
+        run: |
+          osmium export filtered.osm.pbf \
+            -f geojsonseq \
+            --add-unique-id=type_id \
+            --omit-rs \
+            | node scripts/convert-osm-extract.mjs
 
       - name: Zapisz zrzut w repozytorium
         run: |

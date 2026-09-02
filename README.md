@@ -40,14 +40,19 @@ Zrzut generuje workflow **Zrzut danych OSM** (`.github/workflows/osm-snapshot.ym
 uruchamiany **ręcznie** z zakładki Actions - wiaty i paleniska zmieniają się na
 tyle rzadko, że nie ma sensu odświeżać ich z harmonogramu.
 
-Skrypt `scripts/fetch-osm.mjs` przechodzi Polskę 66 kaflami po 1 stopniu i
-zawęża wyniki filtrem obszarowym `area["ISO3166-1"="PL"]`, żeby nie ściągać
-Czech, Niemiec i Słowacji, które w narożnikach kafli potrafią oddać więcej
-punktów niż sama Polska. Lustro, które zaczyna się sypać, spada na koniec
-kolejki, każdy kafel ma 8 prób z narastającym odstępem, a kafle nieudane
-wracają do drugiego podejścia. Plik powstaje tylko wtedy, gdy **wszystkie**
-kafle się powiodły - inaczej zrzut nie jest nadpisywany, żeby nie zostawić
-dziur w danych.
+Źródłem jest **gotowy zrzut Polski z Geofabriku**, a nie Overpass. Workflow
+pobiera `poland-latest.osm.pbf`, wycina interesujące obiekty przez
+`osmium tags-filter`, eksportuje je strumieniem GeoJSON i przepuszcza przez
+`scripts/convert-osm-extract.mjs`, który liczy środki geometrii i zapisuje
+zwarty plik.
+
+Overpass do tego nie służy: to narzędzie do małych zapytań na żywo. Przy
+próbie przejścia całego kraju 66 kaflami lustra odbijają ruch limitami i
+przebieg ciągnie się godzinami, kończąc się losowo. Zrzut z Geofabriku to
+kilka minut, deterministycznie i bez zależności od cudzych serwerów.
+
+Poprzednie podejście przez Overpass zostało w `scripts/fetch-osm.mjs` jako
+zapasowe.
 
 Format jest krotkowy, żeby plik był możliwie mały:
 `[lat, lon, typ, wiataPrzystankowa, typOsm, idOsm, nazwa]`.
@@ -123,9 +128,18 @@ linii rośnie do megabajtów.
 
 ## Warstwy BDL
 
+Pod filtr **Miejsca biwakowe** wpadają cztery warstwy (6, 8, 10, 12), więc dymek
+podaje nazwę konkretnej warstwy - „Kemping", „Pole biwakowe" - zamiast ogólnego
+„Miejsca biwakowe". Punkty wyprowadzone z flag udogodnień (palenisko przy
+miejscu wypoczynku) opisują samo udogodnienie, a nie warstwę źródłową.
+
+
 - 0 - obszary Zanocuj w lesie (poligony)
 - 5 - schroniska leśne
 - 6 - miejsca biwakowania
+- 8 - pola biwakowe
+- 10 - kempingi
+- 12 - obozowiska harcerskie
 - 15 - miejsca wypoczynku (pola `wiata`, `lawostoly`, `palenisko`, `parking`,
   `toalety_tm`, `toalety_st`, `woda_pitna`, `kuchenka`)
 - 17 - parkingi leśne
