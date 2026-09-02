@@ -89,7 +89,9 @@ const BDL_LAYERS = [
   [17, "parking", BASIC_FIELDS, "Parking leśny"],
   [19, "parking", BASIC_FIELDS, "Miejsce postoju pojazdów"],
   [25, "viewpoint", BASIC_FIELDS, "Punkt widokowy"],
-  [27, "other", AMENITY_FIELDS, "Obiekt rekreacyjny"],
+  // Warstwa 27 ma inny schemat niż 15 i odrzuca zapytanie o pola
+  // udogodnień, więc pobieramy komplet zamiast zgadywać.
+  [27, "other", "*", "Obiekt rekreacyjny"],
 ];
 
 document.querySelector("#app").innerHTML = `
@@ -715,11 +717,19 @@ function loadZones(bounds, zoom, signal) {
 async function loadBdlPois(bounds, signal) {
   const results = await Promise.allSettled(
     BDL_LAYERS.map(async ([layer, kind, fields, label]) => {
-      const features = await loadBdlLayer(layer, bounds, fields, {
-        signal,
-        geometryPrecision: "6",
-        maxPages: 2,
-      });
+      const opts = { signal, geometryPrecision: "6", maxPages: 2 };
+      let features;
+
+      try {
+        features = await loadBdlLayer(layer, bounds, fields, opts);
+      } catch (error) {
+        // ArcGIS odrzuca całe zapytanie, gdy w outFields jest pole, którego
+        // warstwa nie ma. Schematy nie są udokumentowane, więc zamiast tracić
+        // warstwę, ponawiamy raz z kompletem pól.
+        if (fields === "*" || signal?.aborted) throw error;
+        features = await loadBdlLayer(layer, bounds, "*", opts);
+      }
+
       return features.flatMap((f) => normalizeBdl(f, layer, kind, label));
     })
   );
@@ -786,7 +796,10 @@ function normalizeBdl(feature, layer, kind, label) {
     if (yes(p.woda_pitna)) add("water");
     if (yes(p.toalety_tm) || yes(p.toalety_st)) add("toilets");
     if (yes(p.parking)) add("parking");
-    if (kind === "rest" && !out.length) add("picnic", label);
+    // Warstwa "inne obiekty" bywa bez flag udogodnień; bez tego jej punkty
+    // przepadłyby mimo udanego pobrania. Etykieta warstwy w dymku mówi, czym
+    // obiekt jest naprawdę.
+    if (!out.length) add("picnic", label);
   }
   return out;
 }

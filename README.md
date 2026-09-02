@@ -151,6 +151,11 @@ linii rośnie do megabajtów.
 
 ## Warstwy BDL
 
+Schematy pól warstw nie są udokumentowane, a ArcGIS odrzuca **całe** zapytanie,
+gdy w `outFields` znajdzie pole, którego warstwa nie ma. Nieudane pobranie jest
+więc raz ponawiane z `outFields=*`, zamiast tracić warstwę. Punkt z warstwy bez
+flag udogodnień nadal trafia na mapę, z nazwą warstwy w dymku.
+
 Pod filtr **Miejsca biwakowe** wpadają cztery warstwy (6, 8, 10, 12), więc dymek
 podaje nazwę konkretnej warstwy - „Kemping", „Pole biwakowe" - zamiast ogólnego
 „Miejsca biwakowe". Punkty wyprowadzone z flag udogodnień (palenisko przy
@@ -168,7 +173,8 @@ miejscu wypoczynku) opisują samo udogodnienie, a nie warstwę źródłową.
 - 17 - parkingi leśne
 - 19 - miejsca postoju pojazdów
 - 25 - punkty widokowe
-- 27 - inne punktowe obiekty rekreacyjne
+- 27 - inne punktowe obiekty rekreacyjne (inny schemat niż 15, pobierana
+  z `outFields=*`)
 - 34 - ścieżki dydaktyczne (linie)
 - 35 - szlaki turystyczne (linie)
 
