@@ -52,10 +52,11 @@ jobs:
 
       - name: Zbuduj zrzut aplikacji
         run: |
+          # Bez --omit-rs: tej opcji nie ma w każdej wersji osmium, a konwerter
+          # i tak zdejmuje separator rekordów z RFC 8142.
           osmium export filtered.osm.pbf \
             -f geojsonseq \
             --add-unique-id=type_id \
-            --omit-rs \
             | node scripts/convert-osm-extract.mjs
 
       - name: Zapisz zrzut w repozytorium
