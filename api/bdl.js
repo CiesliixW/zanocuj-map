@@ -5,6 +5,9 @@ const ALLOWED_LAYERS = new Set([
   "0",   // Zanocuj w lesie polygons
   "5",   // Schroniska leśne - points
   "6",   // Miejsca biwakowania - points
+  "8",   // Pola biwakowe - points
+  "10",  // Kempingi - points
+  "12",  // Obozowiska harcerskie - points
   "15",  // Miejsca wypoczynku - points
   "17",  // Parkingi leśne - points
   "19",  // Miejsca postoju pojazdów - points

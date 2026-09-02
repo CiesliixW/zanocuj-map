@@ -128,9 +128,18 @@ linii rośnie do megabajtów.
 
 ## Warstwy BDL
 
+Pod filtr **Miejsca biwakowe** wpadają cztery warstwy (6, 8, 10, 12), więc dymek
+podaje nazwę konkretnej warstwy - „Kemping", „Pole biwakowe" - zamiast ogólnego
+„Miejsca biwakowe". Punkty wyprowadzone z flag udogodnień (palenisko przy
+miejscu wypoczynku) opisują samo udogodnienie, a nie warstwę źródłową.
+
+
 - 0 - obszary Zanocuj w lesie (poligony)
 - 5 - schroniska leśne
 - 6 - miejsca biwakowania
+- 8 - pola biwakowe
+- 10 - kempingi
+- 12 - obozowiska harcerskie
 - 15 - miejsca wypoczynku (pola `wiata`, `lawostoly`, `palenisko`, `parking`,
   `toalety_tm`, `toalety_st`, `woda_pitna`, `kuchenka`)
 - 17 - parkingi leśne
