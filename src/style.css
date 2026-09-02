@@ -496,3 +496,95 @@ body.on-imagery .leaflet-overlay-pane path {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
 }
+
+.list-head {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  margin-bottom: 9px;
+}
+
+.list-head select {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #d5dcd2;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.list-count {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef2ec;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.place-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #e1e6df;
+  border-radius: 10px;
+}
+
+.place-list li + li {
+  border-top: 1px solid #eef1ec;
+}
+
+.place-list button {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.place-list button:hover {
+  background: #f1f6ef;
+}
+
+.place-icon {
+  font-size: 17px;
+  line-height: 1;
+}
+
+.place-text {
+  display: grid;
+  min-width: 0;
+}
+
+.place-name {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.place-meta {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.place-dist {
+  color: #1f6b3c;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.place-empty {
+  padding: 12px 10px;
+  color: #6b7280;
+  font-size: 13px;
+}
