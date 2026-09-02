@@ -121,22 +121,31 @@ document.querySelector("#app").innerHTML = `
       <label class="source-filter"><input id="trail-34" type="checkbox" data-trail="34"> <span class="dash dash-sciezka"></span> Ścieżki dydaktyczne (BDL)</label>
       <p class="hint">Punkty z obu baz są pokazywane osobno. Jeśli BDL i OSM opisują to samo miejsce, markery rozsuwają się, żeby oba były klikalne.</p>
     </section>
-    <section class="panel list-panel">
-      <h2>Miejsca w widoku</h2>
-      <div class="list-head">
+    <section class="panel info-panel"><h2>Status</h2><p id="status">Przybliż mapę.</p><details id="debug-wrap" class="debug hidden"><summary>Szczegóły</summary><pre id="debug"></pre></details></section>
+    <section class="panel warning-panel"><strong>Uwaga o ogniu</strong><p>Marker paleniska nie oznacza automatycznie, że danego dnia wolno rozpalić ogień. Sprawdź zasady nadleśnictwa.</p></section>
+  </aside>
+  <main class="map-wrap">
+    <div id="map"></div>
+    <div class="map-bar">
+      <div class="map-bar-row">
+        <select id="list-type" aria-label="Czego szukać">
+          <option value="">Wszystkie typy</option>
+        </select>
         <select id="list-sort" aria-label="Sortowanie listy">
           <option value="center">Od środka mapy</option>
           <option value="me">Od mojej lokalizacji</option>
         </select>
-        <span id="list-count" class="list-count">0</span>
+        <button id="list-toggle" type="button" aria-expanded="false">
+          Lista <span id="list-count" class="list-count">0</span>
+        </button>
       </div>
-      <ul id="place-list" class="place-list"></ul>
-      <p id="list-note" class="hint hidden"></p>
-    </section>
-    <section class="panel info-panel"><h2>Status</h2><p id="status">Przybliż mapę.</p><details id="debug-wrap" class="debug hidden"><summary>Szczegóły</summary><pre id="debug"></pre></details></section>
-    <section class="panel warning-panel"><strong>Uwaga o ogniu</strong><p>Marker paleniska nie oznacza automatycznie, że danego dnia wolno rozpalić ogień. Sprawdź zasady nadleśnictwa.</p></section>
-  </aside>
-  <main class="map-wrap"><div id="map"></div><div id="map-message" class="map-message hidden"></div></main>
+      <div id="list-panel" class="list-panel hidden">
+        <ul id="place-list" class="place-list"></ul>
+        <p id="list-note" class="hint hidden"></p>
+      </div>
+    </div>
+    <div id="map-message" class="map-message hidden"></div>
+  </main>
 </div>`;
 
 const $ = (s) => document.querySelector(s);
@@ -173,6 +182,35 @@ for (const id of ["#trail-35", "#trail-34"]) {
 
 const listEl = $("#place-list");
 const listNote = $("#list-note");
+const listPanel = $("#list-panel");
+const listToggle = $("#list-toggle");
+
+// Selektor typów wypełniamy z tej samej definicji co filtry mapy, żeby nie
+// rozjechały się przy dodaniu kolejnego typu.
+for (const [type, [label, icon]] of Object.entries(TYPES)) {
+  const opt = document.createElement("option");
+  opt.value = type;
+  opt.textContent = `${icon} ${label}`;
+  $("#list-type").appendChild(opt);
+}
+
+// Pasek leży nad mapą, więc jego kliknięcia i scroll nie mogą przechodzić
+// do Leafletu jako przeciąganie czy zoom.
+const bar = document.querySelector(".map-bar");
+L.DomEvent.disableClickPropagation(bar);
+L.DomEvent.disableScrollPropagation(bar);
+
+listToggle.addEventListener("click", () => {
+  const open = listPanel.classList.toggle("hidden") === false;
+  listToggle.setAttribute("aria-expanded", String(open));
+});
+
+$("#list-type").addEventListener("change", (e) => {
+  listType = e.target.value;
+  if (listType) listPanel.classList.remove("hidden");
+  listToggle.setAttribute("aria-expanded", String(!listPanel.classList.contains("hidden")));
+  renderPois();
+});
 
 $("#list-sort").addEventListener("change", async (e) => {
   sortMode = e.target.value;
@@ -221,20 +259,27 @@ function currentPosition() {
 }
 
 function renderList(items) {
+  // Selektor zawęża wyłącznie listę; filtry w panelu decydują o tym, co jest
+  // narysowane na mapie, więc lista nigdy nie pokazuje punktu, którego na
+  // mapie nie ma.
+  const scoped = listType ? items.filter((p) => p.type === listType) : items;
+
   // Widok jest już zawężony do obszaru na ekranie, więc pozostaje uporządkować
   // go po odległości od punktu odniesienia.
   const centre = map.getCenter();
   const ref = sortMode === "me" && userPos ? userPos : { lat: centre.lat, lon: centre.lng };
 
-  listRows = items
+  listRows = scoped
     .map((p) => ({ p, d: distanceKm(ref.lat, ref.lon, p.lat, p.lon) }))
     .sort((a, b) => a.d - b.d)
     .slice(0, LIST_MAX);
 
-  $("#list-count").textContent = items.length;
+  $("#list-count").textContent = scoped.length;
 
   if (!listRows.length) {
-    listEl.innerHTML = `<li class="place-empty">Brak punktów w tym widoku.</li>`;
+    listEl.innerHTML = `<li class="place-empty">${
+      listType ? "Brak takich punktów w tym widoku." : "Brak punktów w tym widoku."
+    }</li>`;
     return;
   }
 
@@ -467,6 +512,7 @@ let trailCount = 0;
 const markerById = new Map();
 let userPos = null;
 let sortMode = "center";
+let listType = "";
 let focusId = null;
 let loadedFor = null;
 let serial = 0;

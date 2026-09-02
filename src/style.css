@@ -155,7 +155,7 @@ footer {
 .map-message {
   position: absolute;
   z-index: 800;
-  top: 18px;
+  top: 74px;
   left: 50%;
   max-width: min(560px, calc(100% - 32px));
   padding: 10px 14px;
@@ -527,10 +527,8 @@ body.on-imagery .leaflet-overlay-pane path {
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 320px;
+  max-height: min(58vh, 420px);
   overflow-y: auto;
-  border: 1px solid #e1e6df;
-  border-radius: 10px;
 }
 
 .place-list li + li {
@@ -587,4 +585,73 @@ body.on-imagery .leaflet-overlay-pane path {
   padding: 12px 10px;
   color: #6b7280;
   font-size: 13px;
+}
+
+/* Pasek sterowania listą leży nad mapą, jak w typowych mapach webowych. */
+.map-bar {
+  position: absolute;
+  z-index: 900;
+  top: 12px;
+  left: 50%;
+  width: min(420px, calc(100% - 24px));
+  transform: translateX(-50%);
+}
+
+.map-bar-row {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #d8ded5;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 6px 24px rgba(31, 44, 32, 0.16);
+}
+
+/* Nazwy typów są dłuższe niż opcje sortowania, więc dostają więcej miejsca. */
+#list-type { flex: 1.5 1 0; }
+
+.map-bar-row select {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid #dfe5dc;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+}
+
+#list-toggle {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid #1f6b3c;
+  border-radius: 8px;
+  background: #1f6b3c;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+#list-toggle:hover { background: #185531; }
+
+#list-toggle .list-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.list-panel {
+  margin-top: 8px;
+  padding: 6px;
+  border: 1px solid #d8ded5;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 30px rgba(31, 44, 32, 0.18);
+}
+
+@media (max-width: 760px) {
+  .map-bar { width: calc(100% - 20px); }
+  .map-bar-row { flex-wrap: wrap; }
+  .map-bar-row select { flex: 1 1 45%; }
 }

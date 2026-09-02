@@ -99,8 +99,15 @@ zapytania na sekundę. Wyniki są zawężone do Polski.
 
 ## Lista miejsc
 
-Panel **Miejsca w widoku** wypisuje punkty z bieżącego widoku i przenosi mapę
-na wybrany, otwierając jego dymek.
+Pasek nad mapą ma trzy elementy: **selektor typu** (czego szukać), **selektor
+sortowania** i przycisk **Lista** z licznikiem, który rozwija panel z wynikami.
+Kliknięcie pozycji przenosi mapę na punkt i otwiera jego dymek.
+
+Selektor typu zawęża **wyłącznie listę**; checkboxy w panelu bocznym decydują o
+tym, co jest narysowane na mapie. Lista respektuje jedno i drugie, więc nigdy
+nie pokaże punktu, którego na mapie nie ma. Opcje selektora budowane są z tej
+samej definicji typów co filtry mapy, żeby nie rozjechały się przy dodaniu
+kolejnego typu.
 
 Lista jest z natury ograniczona do obszaru na ekranie - tyle jest wczytane -
 więc pozostaje kwestia kolejności. Domyślnie sortuje się **po odległości od
@@ -109,9 +116,9 @@ przesunięcie mapy samo przestawia listę. Drugi tryb liczy odległość **od
 lokalizacji użytkownika** (GPS), co ma sens przy planowaniu wyjazdu; przy
 odmowie dostępu lista wraca do sortowania od środka mapy i mówi o tym wprost.
 
-Zawartość listy respektuje filtry typów i źródeł, więc odznaczenie wszystkiego
-poza paleniskami daje listę samych ognisk. Widocznych jest maksymalnie 200
-pozycji.
+Widocznych jest maksymalnie 200 pozycji. Pasek leży nad mapą, więc jego
+kliknięcia i scroll są odcinane od Leafletu, żeby nie przechodziły jako
+przeciąganie czy zoom.
 
 ## Podkłady mapy
 
