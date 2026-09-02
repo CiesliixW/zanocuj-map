@@ -97,6 +97,22 @@ identyfikującego aplikację, którego przeglądarka ustawić nie może, a przy
 okazji odpowiedzi cache'ują się na CDN (24 h), co mieści się w limicie jednego
 zapytania na sekundę. Wyniki są zawężone do Polski.
 
+## Lista miejsc
+
+Panel **Miejsca w widoku** wypisuje punkty z bieżącego widoku i przenosi mapę
+na wybrany, otwierając jego dymek.
+
+Lista jest z natury ograniczona do obszaru na ekranie - tyle jest wczytane -
+więc pozostaje kwestia kolejności. Domyślnie sortuje się **po odległości od
+środka mapy**: środek to miejsce, na które użytkownik właśnie patrzy, więc
+przesunięcie mapy samo przestawia listę. Drugi tryb liczy odległość **od
+lokalizacji użytkownika** (GPS), co ma sens przy planowaniu wyjazdu; przy
+odmowie dostępu lista wraca do sortowania od środka mapy i mówi o tym wprost.
+
+Zawartość listy respektuje filtry typów i źródeł, więc odznaczenie wszystkiego
+poza paleniskami daje listę samych ognisk. Widocznych jest maksymalnie 200
+pozycji.
+
 ## Podkłady mapy
 
 Przełącznik w prawym górnym rogu mapy, wybór zapamiętywany w `localStorage`:

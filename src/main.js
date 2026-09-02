@@ -19,6 +19,7 @@ const DEBOUNCE = 250;
 const SOFT_OSM_AREA = 6;
 const HARD_OSM_AREA = 25;
 const MAX_MARKERS = 900;
+const LIST_MAX = 200;
 
 // Warstwy liniowe BDL. Schematu pól nie znamy, więc pobieramy outFields=*
 // i budujemy dymek z tego, co faktycznie przyszło.
@@ -120,6 +121,18 @@ document.querySelector("#app").innerHTML = `
       <label class="source-filter"><input id="trail-34" type="checkbox" data-trail="34"> <span class="dash dash-sciezka"></span> Ścieżki dydaktyczne (BDL)</label>
       <p class="hint">Punkty z obu baz są pokazywane osobno. Jeśli BDL i OSM opisują to samo miejsce, markery rozsuwają się, żeby oba były klikalne.</p>
     </section>
+    <section class="panel list-panel">
+      <h2>Miejsca w widoku</h2>
+      <div class="list-head">
+        <select id="list-sort" aria-label="Sortowanie listy">
+          <option value="center">Od środka mapy</option>
+          <option value="me">Od mojej lokalizacji</option>
+        </select>
+        <span id="list-count" class="list-count">0</span>
+      </div>
+      <ul id="place-list" class="place-list"></ul>
+      <p id="list-note" class="hint hidden"></p>
+    </section>
     <section class="panel info-panel"><h2>Status</h2><p id="status">Przybliż mapę.</p><details id="debug-wrap" class="debug hidden"><summary>Szczegóły</summary><pre id="debug"></pre></details></section>
     <section class="panel warning-panel"><strong>Uwaga o ogniu</strong><p>Marker paleniska nie oznacza automatycznie, że danego dnia wolno rozpalić ogień. Sprawdź zasady nadleśnictwa.</p></section>
   </aside>
@@ -154,6 +167,108 @@ for (const id of ["#src-bdl", "#src-osm", "#only-zone", "#hide-bus"]) {
 // zapamiętany widok, a nie tylko przerysować to, co już jest w pamięci.
 for (const id of ["#trail-35", "#trail-34"]) {
   $(id).addEventListener("change", () => { loadedFor = null; schedule(); });
+}
+
+/* ----------------------------------------------------------------- lista --- */
+
+const listEl = $("#place-list");
+const listNote = $("#list-note");
+
+$("#list-sort").addEventListener("change", async (e) => {
+  sortMode = e.target.value;
+  if (sortMode === "me" && !userPos) {
+    listNote.textContent = "Pytam o lokalizację...";
+    listNote.classList.remove("hidden");
+    try {
+      userPos = await currentPosition();
+      listNote.classList.add("hidden");
+    } catch (err) {
+      // Bez zgody na lokalizację lista nadal ma działać, tylko od środka mapy.
+      sortMode = "center";
+      $("#list-sort").value = "center";
+      listNote.textContent = `Nie udało się ustalić lokalizacji: ${errText(err)}. Sortuję od środka mapy.`;
+      listNote.classList.remove("hidden");
+    }
+  }
+  renderPois();
+});
+
+listEl.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-id]");
+  if (!btn) return;
+  const poi = listRows.find((r) => r.p.id === btn.dataset.id)?.p;
+  if (!poi) return;
+
+  // Przesunięcie mapy uruchamia odświeżenie, które przebudowuje markery, więc
+  // sam openPopup() zostałby po chwili zamknięty. Wybór trzeba zapamiętać i
+  // odtworzyć po każdym przerysowaniu.
+  focusId = poi.id;
+  map.setView([poi.lat, poi.lon], Math.max(map.getZoom(), 16));
+  markerById.get(poi.id)?.openPopup();
+});
+
+let listRows = [];
+
+function currentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error("przeglądarka nie udostępnia lokalizacji"));
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      (err) => reject(new Error(err.message || "odmowa dostępu")),
+      { timeout: 10000, maximumAge: 300000 }
+    );
+  });
+}
+
+function renderList(items) {
+  // Widok jest już zawężony do obszaru na ekranie, więc pozostaje uporządkować
+  // go po odległości od punktu odniesienia.
+  const centre = map.getCenter();
+  const ref = sortMode === "me" && userPos ? userPos : { lat: centre.lat, lon: centre.lng };
+
+  listRows = items
+    .map((p) => ({ p, d: distanceKm(ref.lat, ref.lon, p.lat, p.lon) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, LIST_MAX);
+
+  $("#list-count").textContent = items.length;
+
+  if (!listRows.length) {
+    listEl.innerHTML = `<li class="place-empty">Brak punktów w tym widoku.</li>`;
+    return;
+  }
+
+  listEl.innerHTML = listRows
+    .map(({ p, d }) => {
+      const [label, emoji] = TYPES[p.type];
+      const name = p.name || p.layerLabel || label;
+      const badge = p.source === "BDL" ? "LP" : "OSM";
+      return (
+        `<li><button type="button" data-id="${esc(p.id)}">` +
+          `<span class="place-icon">${emoji}</span>` +
+          `<span class="place-text"><span class="place-name">${esc(name)}</span>` +
+          `<span class="place-meta">${esc(p.layerLabel || label)} · ${badge}${p.inZone ? " · w obszarze" : ""}</span></span>` +
+          `<span class="place-dist">${formatDistance(d)}</span>` +
+        `</button></li>`
+      );
+    })
+    .join("");
+}
+
+function formatDistance(km) {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(km < 10 ? 1 : 0).replace(".", ",")} km`;
+}
+
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
 }
 
 /* --------------------------------------------------------- wyszukiwarka --- */
@@ -264,6 +379,10 @@ function note(text) {
 }
 
 // Dymki Leafletu powstają i znikają w locie, więc nasłuch jest delegowany.
+document.addEventListener("click", (e) => {
+  if (e.target.closest(".leaflet-popup-close-button")) focusId = null;
+});
+
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest(".copy-coords");
   if (!btn) return;
@@ -345,6 +464,10 @@ let zoneBoxes = [];
 let bdlPois = [];
 let osmPois = [];
 let trailCount = 0;
+const markerById = new Map();
+let userPos = null;
+let sortMode = "center";
+let focusId = null;
 let loadedFor = null;
 let serial = 0;
 let timer;
@@ -929,7 +1052,15 @@ function renderPois() {
   const capped = visible.slice(0, MAX_MARKERS);
   fanOut(capped);
 
-  for (const p of capped) poiLayer.addLayer(buildMarker(p));
+  markerById.clear();
+  for (const p of capped) {
+    const marker = buildMarker(p);
+    markerById.set(p.id, marker);
+    poiLayer.addLayer(marker);
+  }
+
+  renderList(visible);
+  if (focusId) markerById.get(focusId)?.openPopup();
 
   if (visible.length > capped.length) {
     showMessage(`Pokazuję ${capped.length} z ${visible.length} punktów. Przybliż, żeby zobaczyć resztę.`);
@@ -953,6 +1084,7 @@ function buildMarker(p) {
   });
 
   const marker = L.marker([p.lat, p.lon], { icon, riseOnHover: true });
+  marker.on("click", () => { focusId = p.id; });
 
   let link = "";
   if (p.source === "OSM") {
