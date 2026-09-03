@@ -120,6 +120,19 @@ Widocznych jest maksymalnie 200 pozycji. Pasek leży nad mapą, więc jego
 kliknięcia i scroll są odcinane od Leafletu, żeby nie przechodziły jako
 przeciąganie czy zoom.
 
+## Mobile
+
+Poniżej 760 px mapa zajmuje **cały ekran**, a panel boczny staje się szufladą
+wysuwaną przyciskiem ☰ z paska nad mapą, z przyciemnieniem tła; zamyka ją
+kliknięcie w tło, Escape albo wybór miejsca z listy. Wysokość liczona jest
+w `dvh`, więc chowający się pasek adresu nie ucina mapy.
+
+Na wąskim pasku nie mieszczą się dwa selektory naraz - nazwa typu obcinała się
+do dwóch znaków - więc **selektor sortowania przenosi się do panelu listy**.
+Element jest jeden, przekładany między pasek a panel przy zmianie szerokości,
+bez duplikowania `id`. Pasek ma `z-index` ponad kontrolkami Leafletu, które
+domyślnie siedzą na 1000 i lądowały nad rozwiniętą listą.
+
 ## Podkłady mapy
 
 Przełącznik w prawym górnym rogu mapy, wybór zapamiętywany w `localStorage`:

@@ -126,10 +126,12 @@ document.querySelector("#app").innerHTML = `
     <section class="panel info-panel"><h2>Status</h2><p id="status">Przybliż mapę.</p><details id="debug-wrap" class="debug hidden"><summary>Szczegóły</summary><pre id="debug"></pre></details></section>
     <section class="panel warning-panel"><strong>Uwaga o ogniu</strong><p>Marker paleniska nie oznacza automatycznie, że danego dnia wolno rozpalić ogień. Sprawdź zasady nadleśnictwa.</p></section>
   </aside>
+  <div id="scrim" class="scrim"></div>
   <main class="map-wrap">
     <div id="map"></div>
     <div class="map-bar">
       <div class="map-bar-row">
+        <button id="menu-toggle" type="button" aria-expanded="false" aria-label="Filtry i ustawienia">☰</button>
         <select id="list-type" aria-label="Czego szukać">
           <option value="">Wszystkie typy</option>
         </select>
@@ -201,6 +203,35 @@ for (const [type, [label, icon]] of Object.entries(TYPES)) {
 const bar = document.querySelector(".map-bar");
 L.DomEvent.disableClickPropagation(bar);
 L.DomEvent.disableScrollPropagation(bar);
+
+// Na wąskim ekranie panel boczny jest szufladą - mapa ma zostać pełnoekranowa.
+const menuToggle = $("#menu-toggle");
+
+function setMenu(open) {
+  document.body.classList.toggle("menu-open", open);
+  menuToggle.setAttribute("aria-expanded", String(open));
+}
+
+menuToggle.addEventListener("click", () => setMenu(!document.body.classList.contains("menu-open")));
+
+// Na wąskim pasku nie mieszczą się dwa selektory naraz i nazwa typu obcina się
+// do dwóch znaków. Sortowanie jest wyborem drugorzędnym, więc na telefonie
+// przenosi się do panelu listy - jeden element, bez duplikowania id.
+const sortSelect = $("#list-sort");
+const narrow = window.matchMedia("(max-width: 760px)");
+
+function placeSortSelect() {
+  if (narrow.matches) listPanel.prepend(sortSelect);
+  else $(".map-bar-row").insertBefore(sortSelect, listToggle);
+}
+
+placeSortSelect();
+narrow.addEventListener("change", placeSortSelect);
+$("#scrim").addEventListener("click", () => setMenu(false));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") setMenu(false); });
+
+// Wybór z listy dotyczy mapy, więc szuflada nie ma jej zasłaniać.
+listEl.addEventListener("click", () => setMenu(false));
 
 listToggle.addEventListener("click", () => {
   const open = listPanel.classList.toggle("hidden") === false;
