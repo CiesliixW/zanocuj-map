@@ -23,9 +23,11 @@ obszaru Zanocuj w lesie.
 
 - typy obiektów (wiaty, paleniska, miejsca wypoczynku, woda, toalety, biwak,
   parking, punkty widokowe)
-- źródło danych (BDL / OSM) niezależnie
-- **Tylko wewnątrz obszarów Zanocuj w lesie** - domyślnie wyłączone, bo dane OSM
-  nie są przypisane do granic programu i taki filtr odcina większość punktów
+- źródło danych (BDL / OSM) niezależnie; domyślnie włączone jest **tylko BDL**,
+  bo dane Lasów Państwowych są powiązane z programem, a OSM stanowi uzupełnienie
+- **Tylko wewnątrz obszarów Zanocuj w lesie** - domyślnie **włączone**; po
+  odznaczeniu widać też punkty spoza obszarów programu, w szczególności OSM,
+  który nie jest przypisany do jego granic
 - **Ukryj wiaty przystankowe (OSM)** - domyślnie wyłączone, żeby wynik zgadzał
   się 1:1 z overpass-turbo
 
@@ -208,8 +210,13 @@ Pozycja mapy zapisuje się w adresie jako `#zoom/lat/lon`, np.
 
 ## Zoom
 
-- zoom 8+ - obszary Zanocuj w lesie
+- zoom 7+ - obszary Zanocuj w lesie, czyli od startowego widoku całego kraju
 - zoom 10+ - punkty BDL i OSM
+
+Obszary ładują się już przy pierwszym otwarciu mapy - inaczej aplikacja wygląda
+na pustą, dopóki użytkownik nie przybliży. Przy widoku kraju geometria jest
+mocno generalizowana (`maxAllowableOffset` 0.0008), a kontur pogrubiony, bo
+obszary mają wtedy po kilka pikseli i bez tego byłyby niewidoczne.
 
 Margines pobierania zwęża się automatycznie przy dużym widoku, tak żeby bbox dla
 Overpass mieścił się w rozsądnym budżecie. Zapytanie jest odrzucane dopiero, gdy
