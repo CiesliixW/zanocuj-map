@@ -97,55 +97,84 @@ const BDL_LAYERS = [
 document.querySelector("#app").innerHTML = `
 <div class="layout">
   <aside class="sidebar">
-    <div class="brand"><div class="brand-badge">🌲</div><div><h1>Zanocuj w lesie</h1><p>Obszary programu + punkty z BDL i OpenStreetMap.</p></div></div>
-    <section class="panel search-panel">
-      <div class="search-row">
-        <input id="search" type="search" placeholder="Miasto, gmina, nadleśnictwo..." autocomplete="off" aria-label="Szukaj miejsca">
-        <button id="search-go" type="button" aria-label="Szukaj">Szukaj</button>
+    <header class="rail-head">
+      <h1>Zanocuj w lesie</h1>
+      <p class="rail-sub">Lasy Państwowe · OpenStreetMap</p>
+    </header>
+
+    <section class="rail-section">
+      <label class="field-label" for="search">Szukaj miejsca</label>
+      <div class="input-row">
+        <input id="search" type="search" placeholder="Miasto lub gmina" autocomplete="off">
+        <button id="search-go" class="btn btn-secondary" type="button">Szukaj</button>
       </div>
-      <ul id="search-results" class="search-results hidden"></ul>
-      <p id="search-note" class="hint hidden"></p>
+      <ul id="search-results" class="option-list hidden"></ul>
+      <p id="search-note" class="note hidden"></p>
     </section>
-    <section class="panel"><h2>Pokaż na mapie</h2><div id="filters" class="filters"></div></section>
-    <section class="panel stats-panel">
-      <div class="stat-row"><span><span class="dot dot-zone"></span> Obszary Zanocuj w lesie</span><strong id="zones">0</strong></div>
-      <div class="stat-row"><span>Punkty BDL</span><strong id="bdl">0</strong></div>
-      <div class="stat-row"><span>Punkty OSM</span><strong id="osm">0</strong></div>
-      <div class="stat-row"><span>Pokazane markery</span><strong id="shown">0</strong></div>
-      <div class="stat-row"><span>Szlaki i ścieżki</span><strong id="trails">0</strong></div>
+
+    <section class="rail-section">
+      <h2 class="rail-label">Rodzaje miejsc</h2>
+      <div id="filters" class="check-list"></div>
     </section>
-    <section class="panel"><h2>Źródła</h2>
-      <label class="source-filter"><input id="src-bdl" type="checkbox" checked> <span class="dot dot-bdl"></span> BDL / Lasy Państwowe</label>
-      <label class="source-filter"><input id="src-osm" type="checkbox"> <span class="dot dot-osm"></span> OpenStreetMap</label>
-      <label class="source-filter"><input id="only-zone" type="checkbox" checked> Tylko wewnątrz obszarów Zanocuj w lesie</label>
-      <label class="source-filter"><input id="hide-bus" type="checkbox"> Ukryj wiaty przystankowe (OSM)</label>
-      <label class="source-filter"><input id="trail-35" type="checkbox" data-trail="35"> <span class="dash dash-szlak"></span> Szlaki turystyczne (BDL)</label>
-      <label class="source-filter"><input id="trail-34" type="checkbox" data-trail="34"> <span class="dash dash-sciezka"></span> Ścieżki dydaktyczne (BDL)</label>
-      <p class="hint">Punkty z obu baz są pokazywane osobno. Jeśli BDL i OSM opisują to samo miejsce, markery rozsuwają się, żeby oba były klikalne.</p>
+
+    <section class="rail-section">
+      <h2 class="rail-label">Źródła i zakres</h2>
+      <div class="check-list">
+        <label class="check"><input id="src-bdl" type="checkbox" checked><span class="glyph-dot dot-bdl"></span><span>BDL / Lasy Państwowe</span></label>
+        <label class="check"><input id="src-osm" type="checkbox"><span class="glyph-dot dot-osm"></span><span>OpenStreetMap</span></label>
+        <label class="check check-wide"><input id="only-zone" type="checkbox" checked><span>Tylko w obszarach programu</span></label>
+        <label class="check check-wide"><input id="hide-bus" type="checkbox"><span>Bez wiat przystankowych</span></label>
+      </div>
+      <p class="note note-rule">Punkty z obu baz są niezależne. Gdy opisują to samo miejsce, markery rozsuwają się, żeby oba dało się kliknąć.</p>
     </section>
-    <section class="panel info-panel"><h2>Status</h2><p id="status">Przybliż mapę.</p><details id="debug-wrap" class="debug hidden"><summary>Szczegóły</summary><pre id="debug"></pre></details></section>
-    <section class="panel warning-panel"><strong>Uwaga o ogniu</strong><p>Marker paleniska nie oznacza automatycznie, że danego dnia wolno rozpalić ogień. Sprawdź zasady nadleśnictwa.</p></section>
+
+    <section class="rail-section">
+      <h2 class="rail-label">Warstwy liniowe</h2>
+      <div class="check-list">
+        <label class="check"><input id="trail-35" type="checkbox" data-trail="35"><span class="glyph-dash dash-szlak"></span><span>Szlaki turystyczne</span></label>
+        <label class="check"><input id="trail-34" type="checkbox" data-trail="34"><span class="glyph-dash dash-sciezka"></span><span>Ścieżki dydaktyczne</span></label>
+      </div>
+    </section>
+
+    <section class="rail-section">
+      <h2 class="rail-label">W tym widoku</h2>
+      <dl class="summary">
+        <div><dt>Obszary programu</dt><dd id="zones">0</dd></div>
+        <div><dt>Punkty BDL</dt><dd id="bdl">0</dd></div>
+        <div><dt>Punkty OSM</dt><dd id="osm">0</dd></div>
+        <div><dt>Markery na mapie</dt><dd id="shown">0</dd></div>
+        <div><dt>Szlaki i ścieżki</dt><dd id="trails">0</dd></div>
+      </dl>
+    </section>
+
+    <section class="rail-section rail-foot">
+      <p id="status" class="note">Przybliż mapę.</p>
+      <details id="debug-wrap" class="details hidden"><summary>Szczegóły techniczne</summary><pre id="debug"></pre></details>
+      <p class="note note-rule">Marker paleniska nie oznacza, że danego dnia wolno rozpalić ogień. Sprawdź zasady nadleśnictwa.</p>
+    </section>
   </aside>
+
   <div id="scrim" class="scrim"></div>
+
   <main class="map-wrap">
     <div id="map"></div>
     <div class="map-bar">
-      <div class="map-bar-row">
-        <button id="menu-toggle" type="button" aria-expanded="false" aria-label="Filtry i ustawienia">☰</button>
-        <select id="list-type" aria-label="Czego szukać">
+      <div class="toolbar">
+        <button id="menu-toggle" class="btn btn-icon" type="button" aria-expanded="false" aria-label="Filtry i ustawienia">☰</button>
+        <select id="list-type" class="control" aria-label="Czego szukać">
           <option value="">Wszystkie typy</option>
         </select>
-        <select id="list-sort" aria-label="Sortowanie listy">
+        <select id="list-sort" class="control" aria-label="Sortowanie listy">
           <option value="center">Od środka mapy</option>
           <option value="me">Od mojej lokalizacji</option>
         </select>
-        <button id="list-toggle" type="button" aria-expanded="false">
-          Lista <span id="list-count" class="list-count">0</span>
+        <button id="list-toggle" class="btn btn-primary" type="button" aria-expanded="false">
+          Lista <span id="list-count" class="count">0</span>
         </button>
       </div>
-      <div id="list-panel" class="list-panel hidden">
+      <div id="list-panel" class="float hidden">
         <ul id="place-list" class="place-list"></ul>
-        <p id="list-note" class="hint hidden"></p>
+        <p id="list-note" class="list-note hidden"></p>
       </div>
     </div>
     <div id="map-message" class="map-message hidden"></div>
@@ -161,8 +190,12 @@ const enabled = new Set(Object.keys(TYPES));
 
 for (const [type, [label, icon]] of Object.entries(TYPES)) {
   const el = document.createElement("label");
-  el.className = "filter";
-  el.innerHTML = `<input type="checkbox" data-type="${type}" checked><span class="filter-icon">${icon}</span><span>${label}</span>`;
+  el.className = "check";
+  el.innerHTML =
+    `<input type="checkbox" data-type="${type}" checked>` +
+    `<span class="check-glyph">${icon}</span>` +
+    `<span>${label}</span>` +
+    `<span class="check-count" data-count="${type}">0</span>`;
   $("#filters").appendChild(el);
 }
 
@@ -222,7 +255,7 @@ const narrow = window.matchMedia("(max-width: 760px)");
 
 function placeSortSelect() {
   if (narrow.matches) listPanel.prepend(sortSelect);
-  else $(".map-bar-row").insertBefore(sortSelect, listToggle);
+  else $(".toolbar").insertBefore(sortSelect, listToggle);
 }
 
 placeSortSelect();
@@ -310,9 +343,14 @@ function renderList(items) {
   $("#list-count").textContent = scoped.length;
 
   if (!listRows.length) {
-    listEl.innerHTML = `<li class="place-empty">${
-      listType ? "Brak takich punktów w tym widoku." : "Brak punktów w tym widoku."
-    }</li>`;
+    // W trakcie pobierania pokazujemy szkielet o układzie wiersza, żeby lista
+    // nie skakała po wczytaniu; pustka to dopiero wynik zakończonego zapytania.
+    listEl.innerHTML = document.body.classList.contains("loading")
+      ? Array.from({ length: 3 }, () =>
+          `<li class="skeleton"><span></span><span></span><span></span></li>`).join("")
+      : `<li class="place-empty">${
+          listType ? "Brak takich punktów w tym widoku." : "Brak punktów w tym widoku."
+        }</li>`;
     return;
   }
 
@@ -611,6 +649,7 @@ async function refresh() {
   if (zoom < MIN_ZONE_ZOOM) {
     abortInFlight();
     serial++;
+    document.body.classList.remove("loading");
     resetData();
     zoneLayer.clearLayers();
     poiLayer.clearLayers();
@@ -641,6 +680,7 @@ async function refresh() {
 
   clearDebug();
   hideMessage();
+  document.body.classList.add("loading");
   setStatus("Pobieram dane...");
 
   const jobs = [];
@@ -734,6 +774,7 @@ async function refresh() {
 
   await Promise.all(jobs);
   if (id !== serial) return;
+  document.body.classList.remove("loading");
 
   inFlight = null;
   // Nieudane pobranie nie może zostać zapamiętane jako wczytany widok,
@@ -751,18 +792,24 @@ async function refresh() {
 
 /* ---------------------------------------------------------------- BDL --- */
 
+// Koszt zapytania o strefy skaluje się z obszarem widoku, a przy zoomie 7
+// obejmuje on cały kraj. Dokładna geometria nie mieści się wtedy w budżecie
+// czasu proxy, a i tak jest niewidoczna: przy tej skali piksel to ponad
+// kilometr. Uproszczenie, precyzja i liczba stron idą więc w parze z zoomem.
+const ZONE_DETAIL = [
+  { minZoom: 13, offset: "0.00002", precision: "5", pages: 3 },
+  { minZoom: 11, offset: "0.00006", precision: "5", pages: 3 },
+  { minZoom: 9, offset: "0.0002", precision: "5", pages: 3 },
+  { minZoom: 0, offset: "0.01", precision: "3", pages: 1 },
+];
+
 function loadZones(bounds, zoom, signal) {
-  // Przy widoku całego kraju geometria musi być mocno uproszczona, inaczej
-  // payload stref rośnie do megabajtów.
-  const offset =
-    zoom >= 13 ? "0.00002" :
-    zoom >= 11 ? "0.00006" :
-    zoom >= 9 ? "0.0002" : "0.0008";
+  const detail = ZONE_DETAIL.find((d) => zoom >= d.minZoom);
   return loadBdlLayer(0, bounds, "objectid,tur_sleep_poly_id,inv_nr,nzw_ob,link", {
     signal,
-    maxAllowableOffset: offset,
-    geometryPrecision: "5",
-    maxPages: 3,
+    maxAllowableOffset: detail.offset,
+    geometryPrecision: detail.precision,
+    maxPages: detail.pages,
   });
 }
 
@@ -1152,14 +1199,20 @@ function renderPois() {
   const onlyZone = $("#only-zone").checked;
   const hideBus = $("#hide-bus").checked;
 
-  const list = [...bdlPois, ...osmPois]
-    .filter((p) => enabled.has(p.type))
+  // Filtr typu stosujemy na końcu, żeby dało się policzyć, ile trafień
+  // dałby każdy typ przy obecnych pozostałych ustawieniach - liczba przy
+  // filtrze mówi, czy warto go w ogóle włączać.
+  const pool = [...bdlPois, ...osmPois]
     .filter((p) => (p.source === "BDL" ? showBdl : showOsm))
     .filter((p) => !(hideBus && p.source === "OSM" && p.bus));
 
-  for (const p of list) p.inZone = insideZone(p.lon, p.lat);
+  const list = pool.filter((p) => enabled.has(p.type));
 
-  const visible = onlyZone ? list.filter((p) => p.inZone) : list;
+  for (const p of pool) p.inZone = insideZone(p.lon, p.lat);
+
+  const inScope = onlyZone ? pool.filter((p) => p.inZone) : pool;
+  const visible = inScope.filter((p) => enabled.has(p.type));
+  updateTypeCounts(inScope);
   const capped = visible.slice(0, MAX_MARKERS);
   fanOut(capped);
 
@@ -1190,8 +1243,8 @@ function buildMarker(p) {
   const icon = L.divIcon({
     className: "poi-marker",
     html: `<div class="poi-marker-inner ${cls}${p.inZone ? " in-zone" : ""}"><span>${emoji}</span><small>${badge}</small></div>`,
-    iconSize: [42, 42],
-    iconAnchor: [21 - dx, 21 - dy],
+    iconSize: [34, 34],
+    iconAnchor: [17 - dx, 17 - dy],
   });
 
   const marker = L.marker([p.lat, p.lon], { icon, riseOnHover: true });
@@ -1204,32 +1257,34 @@ function buildMarker(p) {
     link = `<a target="_blank" rel="noreferrer" href="${esc(p.link)}">Informacje BDL</a>`;
   }
 
+  const coords = `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`;
+  const maps = `https://www.google.com/maps/search/?api=1&query=${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
+
+  // Parametry idą w listę definicyjną, bo to uporządkowana specyfikacja,
+  // a nie ciąg zdań. Akcje są wydzielone i tekstowe - żadna z nich nie jest
+  // na tyle ważna, żeby konkurować z akcją główną na pasku mapy.
+  const spec = (key, value) => `<dt>${key}</dt><dd>${value}</dd>`;
+
   marker.bindPopup(
     `<div class="popup">` +
-      `<strong>${emoji} ${esc(p.name || p.layerLabel || label)}</strong>` +
-      `<div>${esc(p.layerLabel || label)}</div>` +
-      `<div class="popup-source ${p.source === "BDL" ? "source-bdl" : "source-osm"}">Źródło: ${p.source === "BDL" ? "Bank Danych o Lasach (LP)" : "OpenStreetMap"}</div>` +
-      (p.tagLine ? `<div class="popup-tags">${esc(p.tagLine)}</div>` : "") +
-      (p.address ? `<div>${esc(p.address)}</div>` : "") +
-      coordsBlock(p) +
-      `<div class="popup-zone">${p.inZone ? "✅ w obszarze Zanocuj w lesie" : "➖ poza obszarem Zanocuj w lesie"}</div>` +
-      link +
+      `<strong class="popup-title">${emoji} ${esc(p.name || p.layerLabel || label)}</strong>` +
+      `<span class="popup-kind">${esc(p.layerLabel || label)}</span>` +
+      `<dl class="popup-specs">` +
+        spec("Źródło", `<span class="${p.source === "BDL" ? "source-bdl" : "source-osm"}">${
+          p.source === "BDL" ? "Bank Danych o Lasach" : "OpenStreetMap"}</span>`) +
+        (p.tagLine ? spec("Tagi", esc(p.tagLine)) : "") +
+        (p.address ? spec("Adres", esc(p.address)) : "") +
+        spec("Obszar", p.inZone ? "w obszarze programu" : "poza obszarem programu") +
+        spec("Współrzędne", `<span class="popup-coords">${coords}</span>`) +
+      `</dl>` +
+      `<div class="popup-actions">` +
+        `<button type="button" class="copy-coords" data-coords="${coords}">Kopiuj współrzędne</button>` +
+        `<a target="_blank" rel="noreferrer" href="${maps}">Google Maps</a>` +
+        link +
+      `</div>` +
     `</div>`
   );
   return marker;
-}
-
-// Współrzędne w formacie, który Google Maps rozumie po wklejeniu.
-function coordsBlock(p) {
-  const coords = `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`;
-  const maps = `https://www.google.com/maps/search/?api=1&query=${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
-  return (
-    `<div class="popup-coords">` +
-      `<code>${coords}</code>` +
-      `<button type="button" class="copy-coords" data-coords="${coords}">kopiuj</button>` +
-      `<a target="_blank" rel="noreferrer" href="${maps}">Google Maps</a>` +
-    `</div>`
-  );
 }
 
 // Markery z BDL i OSM opisujące to samo miejsce muszą zostać oba widoczne,
@@ -1244,7 +1299,7 @@ function fanOut(list) {
   }
   for (const g of groups.values()) {
     if (g.length < 2) continue;
-    const r = g.length === 2 ? 24 : 22 + g.length * 3;
+    const r = g.length === 2 ? 20 : 18 + g.length * 3;
     g.forEach((p, i) => {
       const a = (2 * Math.PI * i) / g.length - Math.PI / 2;
       p.offset = [Math.round(Math.cos(a) * r), Math.round(Math.sin(a) * r)];
@@ -1265,6 +1320,19 @@ function insideZone(lon, lat) {
     }
   }
   return false;
+}
+
+// Liczba przy każdym typie liczona jest po zastosowaniu pozostałych filtrów,
+// więc odpowiada na pytanie "ile dostanę, jeśli to włączę".
+function updateTypeCounts(items) {
+  const counts = new Map();
+  for (const p of items) counts.set(p.type, (counts.get(p.type) || 0) + 1);
+
+  for (const el of document.querySelectorAll(".check-count")) {
+    const n = counts.get(el.dataset.count) || 0;
+    el.textContent = n;
+    el.dataset.empty = n ? "0" : "1";
+  }
 }
 
 function updateCounts(shown = null) {
