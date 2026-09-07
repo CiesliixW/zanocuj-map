@@ -19,10 +19,32 @@ się kliknąć.
 W popupie widać źródło, surowe tagi OSM i informację, czy punkt jest wewnątrz
 obszaru Zanocuj w lesie.
 
+## System wizualny
+
+Interfejs jest narzędziem do czytania mapy, nie stroną marketingową, więc
+przewagę ma gęstość informacji i typografia, a nie kolejna karta. Tokeny siedzą
+w `:root` w `src/style.css` i są jedynym źródłem wartości:
+
+- odstępy w skali 4 px (`--s-1` … `--s-6`), bez wartości spoza listy
+- trzy promienie: `--r-sm` 4 px, `--r-md` 6 px (kontrolki), `--r-lg` 8 px
+  (powierzchnie); nic nie jest kapsułką
+- powierzchnie i tekst: `--bg`, `--surface`, `--border`, `--text`,
+  `--text-muted`, `--text-subtle`
+- kolor marki wyłącznie na akcję główną, stan aktywny i tożsamość źródła BDL;
+  fiolet, niebieski i pomarańcz niosą znaczenie danych, nie dekorację
+- cień (`--lift`) tylko tam, gdzie element naprawdę unosi się nad mapą: pasek
+  narzędzi, panel listy, dymek, szuflada
+
+Panel boczny jest **jedną powierzchnią** - sekcje rozdziela linia i etykieta,
+nie osobna karta. Przyciski mają trzy warianty (`btn-primary`, `btn-secondary`,
+`btn-icon`) i na widok przypada jedna akcja główna: **Lista** na mapie.
+
 ## Filtry
 
 - typy obiektów (wiaty, paleniska, miejsca wypoczynku, woda, toalety, biwak,
-  parking, punkty widokowe)
+  parking, punkty widokowe); przy każdym typie widać, **ile trafień da po
+  uwzględnieniu pozostałych filtrów** - liczba odpowiada na pytanie, czy warto
+  go w ogóle włączać
 - źródło danych (BDL / OSM) niezależnie; domyślnie włączone jest **tylko BDL**,
   bo dane Lasów Państwowych są powiązane z programem, a OSM stanowi uzupełnienie
 - **Tylko wewnątrz obszarów Zanocuj w lesie** - domyślnie **włączone**; po
