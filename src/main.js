@@ -4,7 +4,7 @@ import L from "leaflet";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point } from "@turf/helpers";
 
-const MIN_ZONE_ZOOM = 8;
+const MIN_ZONE_ZOOM = 7;
 const MIN_POI_ZOOM = 10;
 const MIN_TRAIL_ZOOM = 11;
 const PAD = 0.35;
@@ -116,8 +116,8 @@ document.querySelector("#app").innerHTML = `
     </section>
     <section class="panel"><h2>Źródła</h2>
       <label class="source-filter"><input id="src-bdl" type="checkbox" checked> <span class="dot dot-bdl"></span> BDL / Lasy Państwowe</label>
-      <label class="source-filter"><input id="src-osm" type="checkbox" checked> <span class="dot dot-osm"></span> OpenStreetMap</label>
-      <label class="source-filter"><input id="only-zone" type="checkbox"> Tylko wewnątrz obszarów Zanocuj w lesie</label>
+      <label class="source-filter"><input id="src-osm" type="checkbox"> <span class="dot dot-osm"></span> OpenStreetMap</label>
+      <label class="source-filter"><input id="only-zone" type="checkbox" checked> Tylko wewnątrz obszarów Zanocuj w lesie</label>
       <label class="source-filter"><input id="hide-bus" type="checkbox"> Ukryj wiaty przystankowe (OSM)</label>
       <label class="source-filter"><input id="trail-35" type="checkbox" data-trail="35"> <span class="dash dash-szlak"></span> Szlaki turystyczne (BDL)</label>
       <label class="source-filter"><input id="trail-34" type="checkbox" data-trail="34"> <span class="dash dash-sciezka"></span> Ścieżki dydaktyczne (BDL)</label>
@@ -521,7 +521,7 @@ function readBaseLayer() {
 const zoneLayer = L.geoJSON(null, {
   // Jasny fiolet nad zielenią lasu mieszał się w szarość (4% nasycenia), stąd
   // mocniejsze wypełnienie i wyraźniejsza obwódka.
-  style: { color: "#6b21a8", weight: 2.5, fillColor: "#a855f7", fillOpacity: 0.45 },
+  style: zoneStyle,
   onEachFeature(feature, layer) {
     const p = feature.properties || {};
     layer.bindPopup(`<div class="popup"><strong>${esc(p.nzw_ob || p.inv_nr || "Zanocuj w lesie")}</strong>${p.inv_nr ? `<div>Nr: ${esc(p.inv_nr)}</div>` : ""}</div>`);
@@ -535,6 +535,22 @@ const trailLayer = L.geoJSON(null, {
   },
 }).addTo(map);
 const poiLayer = L.layerGroup().addTo(map);
+
+// Jasny fiolet nad zielenią lasu mieszał się w szarość (4% nasycenia), stąd
+// mocniejsze wypełnienie i wyraźniejsza obwódka. Przy widoku kraju obszary mają
+// po kilka pikseli, więc grubszy kontur robi z nich widoczne punkty - inaczej
+// użytkownik nie wie, że w ogóle są, dopóki nie przybliży.
+function zoneStyle() {
+  const far = map.getZoom() < 10;
+  return {
+    color: "#6b21a8",
+    weight: far ? 4 : 2.5,
+    fillColor: "#a855f7",
+    fillOpacity: far ? 0.6 : 0.45,
+  };
+}
+
+map.on("zoomend", () => zoneLayer.setStyle(zoneStyle));
 
 const cache = new Map();
 let zones = [];
@@ -736,7 +752,12 @@ async function refresh() {
 /* ---------------------------------------------------------------- BDL --- */
 
 function loadZones(bounds, zoom, signal) {
-  const offset = zoom >= 13 ? "0.00002" : zoom >= 11 ? "0.00006" : "0.0002";
+  // Przy widoku całego kraju geometria musi być mocno uproszczona, inaczej
+  // payload stref rośnie do megabajtów.
+  const offset =
+    zoom >= 13 ? "0.00002" :
+    zoom >= 11 ? "0.00006" :
+    zoom >= 9 ? "0.0002" : "0.0008";
   return loadBdlLayer(0, bounds, "objectid,tur_sleep_poly_id,inv_nr,nzw_ob,link", {
     signal,
     maxAllowableOffset: offset,
