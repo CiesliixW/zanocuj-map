@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Zanocuj w lesie">
+  <defs>
+    <linearGradient id="pin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f8f52"/>
+      <stop offset="1" stop-color="#17552f"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#pin)"
+        d="M256 486c0 0 150-166 150-286a150 150 0 1 0-300 0c0 120 150 286 150 286z"/>
+  <path fill="#ffffff"
+        d="M256 112 L368 272 L282 272 L256 224 L230 272 L144 272 Z"/>
+  <rect x="150" y="282" width="212" height="20" rx="10" fill="#ffffff" opacity="0.9"/>
+</svg>
