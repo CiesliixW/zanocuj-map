@@ -114,11 +114,40 @@ h1 {
 }
 
 .rail-label {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
   margin-bottom: var(--s-3);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
 }
+
+/* Nagłówek sekcji filtrów niesie przełącznik całego źródła, więc tytuł i
+   przycisk dzielą jedną linię bazową. */
+.rail-head-row {
+  display: flex;
+  gap: var(--s-3);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.rail-head-row .rail-label { margin-bottom: var(--s-3); }
+
+/* Akcja drugorzędna: sam tekst, bez ramki, żeby nie konkurowała z filtrami. */
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-btn:hover { color: var(--text); }
 
 .note {
   color: var(--text-muted);
