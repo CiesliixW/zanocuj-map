@@ -50,6 +50,7 @@ const SNAPSHOT_TAGS = {
   shelter: "amenity=shelter",
   firepit: "leisure=firepit",
   picnic: "tourism=picnic_site",
+  parking: "amenity=parking",
 };
 
 const OVERPASS_ENDPOINTS = [
@@ -69,6 +70,33 @@ const TYPES = {
   campsite: ["Miejsca biwakowe", "⛺"],
   parking: ["Parking / postój", "🅿️"],
   viewpoint: ["Punkty widokowe", "👁️"],
+};
+
+// Każde źródło ma własny zestaw rodzajów i własny stan zaznaczeń: BDL opisuje
+// udogodnienia flagami przy obiekcie, OSM osobnymi tagami, więc "paleniska z
+// BDL" i "paleniska z OSM" to dwa niezależne pytania.
+const SOURCES = {
+  BDL: {
+    label: "Lasy Państwowe (BDL)",
+    types: ["shelter", "firepit", "picnic", "water", "toilets", "campsite", "parking", "viewpoint"],
+    on: true,
+  },
+  OSM: {
+    label: "OpenStreetMap",
+    types: ["shelter", "firepit", "picnic", "parking"],
+    on: false,
+  },
+};
+
+// Zapytanie do Overpassa składamy z zaznaczonych rodzajów, więc rodzaj
+// niezaznaczony nie kosztuje ani transferu, ani czasu oczekiwania.
+const OSM_QUERY = {
+  shelter: 'nwr["amenity"="shelter"]',
+  firepit: 'nwr["leisure"="firepit"]',
+  picnic: 'nwr["tourism"="picnic_site"]',
+  // Parkingów prywatnych i zamkniętych jest w OSM więcej niż publicznych,
+  // a nocującemu i tak się nie przydadzą.
+  parking: 'nwr["amenity"="parking"]["access"!~"private|no|customers"]',
 };
 
 const AMENITY_FIELDS =
@@ -113,17 +141,27 @@ document.querySelector("#app").innerHTML = `
     </section>
 
     <section class="rail-section">
-      <h2 class="rail-label">Rodzaje miejsc</h2>
-      <div id="filters" class="check-list"></div>
+      <div class="rail-head-row">
+        <h2 class="rail-label"><span class="glyph-dot dot-bdl"></span>Lasy Państwowe</h2>
+        <button class="link-btn" type="button" data-all="BDL"></button>
+      </div>
+      <div class="check-list" data-source="BDL"></div>
     </section>
 
     <section class="rail-section">
-      <h2 class="rail-label">Źródła i zakres</h2>
+      <div class="rail-head-row">
+        <h2 class="rail-label"><span class="glyph-dot dot-osm"></span>OpenStreetMap</h2>
+        <button class="link-btn" type="button" data-all="OSM"></button>
+      </div>
+      <div class="check-list" data-source="OSM"></div>
+      <p class="note note-rule">Z OSM pobieramy tylko zaznaczone rodzaje. Odznaczenie wszystkiego wyłącza to źródło i skraca ładowanie.</p>
+    </section>
+
+    <section class="rail-section">
+      <h2 class="rail-label">Zakres</h2>
       <div class="check-list">
-        <label class="check"><input id="src-bdl" type="checkbox" checked><span class="glyph-dot dot-bdl"></span><span>BDL / Lasy Państwowe</span></label>
-        <label class="check"><input id="src-osm" type="checkbox"><span class="glyph-dot dot-osm"></span><span>OpenStreetMap</span></label>
         <label class="check check-wide"><input id="only-zone" type="checkbox" checked><span>Tylko w obszarach programu</span></label>
-        <label class="check check-wide"><input id="hide-bus" type="checkbox"><span>Bez wiat przystankowych</span></label>
+        <label class="check check-wide"><input id="hide-bus" type="checkbox"><span>Bez wiat przystankowych (OSM)</span></label>
       </div>
       <p class="note note-rule">Punkty z obu baz są niezależne. Gdy opisują to samo miejsce, markery rozsuwają się, żeby oba dało się kliknąć.</p>
     </section>
@@ -186,26 +224,69 @@ const statusEl = $("#status");
 const debugEl = $("#debug");
 const debugWrap = $("#debug-wrap");
 const messageEl = $("#map-message");
-const enabled = new Set(Object.keys(TYPES));
+// Zaznaczenia trzymamy osobno dla każdego źródła - ten sam rodzaj można mieć
+// włączony w jednej bazie i wyłączony w drugiej.
+const enabled = {};
 
-for (const [type, [label, icon]] of Object.entries(TYPES)) {
-  const el = document.createElement("label");
-  el.className = "check";
-  el.innerHTML =
-    `<input type="checkbox" data-type="${type}" checked>` +
-    `<span class="check-glyph">${icon}</span>` +
-    `<span>${label}</span>` +
-    `<span class="check-count" data-count="${type}">0</span>`;
-  $("#filters").appendChild(el);
+for (const [src, spec] of Object.entries(SOURCES)) {
+  enabled[src] = new Set(spec.on ? spec.types : []);
+  const box = document.querySelector(`.check-list[data-source="${src}"]`);
+
+  for (const type of spec.types) {
+    const [label, icon] = TYPES[type];
+    const el = document.createElement("label");
+    el.className = "check";
+    el.innerHTML =
+      `<input type="checkbox" data-type="${type}"${enabled[src].has(type) ? " checked" : ""}>` +
+      `<span class="check-glyph">${icon}</span>` +
+      `<span>${label}</span>` +
+      `<span class="check-count" data-count="${src}:${type}">-</span>`;
+    box.appendChild(el);
+  }
+
+  box.addEventListener("change", (e) => {
+    const cb = e.target.closest("input[data-type]");
+    if (!cb) return;
+    cb.checked ? enabled[src].add(cb.dataset.type) : enabled[src].delete(cb.dataset.type);
+    onFilterChange(src);
+  });
 }
 
-$("#filters").addEventListener("change", (e) => {
-  const cb = e.target.closest("input[data-type]");
-  if (!cb) return;
-  cb.checked ? enabled.add(cb.dataset.type) : enabled.delete(cb.dataset.type);
-  renderPois();
+// Przy ośmiu rodzajach ustawienie "tylko biwaki" to siedem kliknięć, więc
+// nagłówek sekcji przełącza całe źródło jednym.
+document.querySelectorAll("button[data-all]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const src = btn.dataset.all;
+    const spec = SOURCES[src];
+    const turnOn = enabled[src].size < spec.types.length;
+    enabled[src] = new Set(turnOn ? spec.types : []);
+    document
+      .querySelectorAll(`.check-list[data-source="${src}"] input[data-type]`)
+      .forEach((cb) => { cb.checked = turnOn; });
+    onFilterChange(src);
+  });
 });
-for (const id of ["#src-bdl", "#src-osm", "#only-zone", "#hide-bus"]) {
+
+function syncToggleAll() {
+  for (const [src, spec] of Object.entries(SOURCES)) {
+    const btn = document.querySelector(`button[data-all="${src}"]`);
+    btn.textContent = enabled[src].size < spec.types.length ? "Zaznacz wszystkie" : "Odznacz wszystkie";
+  }
+}
+
+syncToggleAll();
+
+function onFilterChange(src) {
+  syncToggleAll();
+  // Odrysowanie jest natychmiastowe, więc odznaczenie widać od razu.
+  renderPois();
+  // Z OSM pobieramy tylko zaznaczone rodzaje, więc dołożenie rodzaju wymaga
+  // nowego zapytania. refresh() sam pozna po zapamiętanym zakresie, czy
+  // wystarczy pamięć, czy trzeba iść do sieci.
+  if (src === "OSM" || enabled.BDL.size) schedule();
+}
+
+for (const id of ["#only-zone", "#hide-bus"]) {
   $(id).addEventListener("change", renderPois);
 }
 
@@ -595,6 +676,10 @@ let zones = [];
 let zoneBoxes = [];
 let bdlPois = [];
 let osmPois = [];
+// Rodzaje, dla których mamy w pamięci komplet danych z danego źródła. BDL
+// pobieramy warstwami naraz, więc albo mamy wszystko, albo nic; z OSM tylko
+// to, co było zaznaczone w chwili pobierania.
+const fetched = { BDL: new Set(), OSM: new Set() };
 let trailCount = 0;
 const markerById = new Map();
 let userPos = null;
@@ -661,7 +746,18 @@ async function refresh() {
 
   // Dane pobieramy dla widoku powiększonego o margines, więc drobne
   // przesunięcia mapy obsługujemy z pamięci, bez ruchu sieciowego.
-  if (loadedFor && loadedFor.band === band(zoom) && loadedFor.bounds.contains(view)) {
+  const wantBdl = enabled.BDL.size > 0;
+  const wantOsm = [...enabled.OSM];
+
+  // Zawężenie filtrów obsługujemy z pamięci: dane szersze niż potrzeba
+  // wystarczy przefiltrować przy rysowaniu. Do sieci idziemy dopiero wtedy,
+  // gdy zaznaczono rodzaj, którego jeszcze nie pobraliśmy.
+  const covered =
+    loadedFor &&
+    (!wantBdl || loadedFor.bdl) &&
+    wantOsm.every((t) => loadedFor.osm.has(t));
+
+  if (covered && loadedFor.band === band(zoom) && loadedFor.bounds.contains(view)) {
     hideMessage();
     const n = renderPois();
     setStatus(`Obszary: ${zones.length}. BDL: ${bdlPois.length}. OSM: ${osmPois.length}. Na mapie: ${n}. (z pamięci)`);
@@ -706,29 +802,37 @@ async function refresh() {
     )
   );
 
-  if (zoom >= MIN_POI_ZOOM) {
+  if (zoom >= MIN_POI_ZOOM && wantBdl) {
     jobs.push(
       loadBdlPois(bounds, controller.signal).then(
         ({ items, errors }) => {
           if (id !== serial) return;
           bdlPois = items;
+          fetched.BDL = new Set(SOURCES.BDL.types);
           if (errors.length) { failed = true; notes.push(`Punkty BDL: ${errors.join(" | ")}`); }
           renderPois();
         },
         (e) => {
           if (id !== serial) return;
           bdlPois = [];
+          fetched.BDL = new Set();
           failed = true;
           notes.push(`Punkty BDL: ${errText(e)}`);
         }
       )
     );
+  } else {
+    bdlPois = [];
+    fetched.BDL = new Set();
+  }
 
+  if (zoom >= MIN_POI_ZOOM && wantOsm.length) {
     jobs.push(
-      loadOsm(bounds, controller.signal).then(
+      loadOsm(bounds, wantOsm, controller.signal).then(
         ({ items, endpoint, tried }) => {
           if (id !== serial) return;
           osmPois = items;
+          fetched.OSM = new Set(wantOsm);
           if (tried.length) notes.push(`OSM (pominięte serwery): ${tried.join(" | ")}`);
           if (endpoint) notes.push(`OSM: ${endpoint}`);
           renderPois();
@@ -736,6 +840,7 @@ async function refresh() {
         (e) => {
           if (id !== serial) return;
           osmPois = [];
+          fetched.OSM = new Set();
           failed = true;
           osmError = errText(e).split("\n")[0];
           notes.push(`OSM: ${errText(e)}`);
@@ -743,9 +848,14 @@ async function refresh() {
       )
     );
   } else {
-    bdlPois = [];
     osmPois = [];
+    fetched.OSM = new Set();
+  }
+
+  if (zoom < MIN_POI_ZOOM) {
     showMessage(`Przybliż do ${MIN_POI_ZOOM}+, żeby zobaczyć wiaty, paleniska i pozostałe punkty.`);
+  } else if (!wantBdl && !wantOsm.length) {
+    showMessage("Nie zaznaczono żadnego rodzaju miejsc - nic nie pobieram.");
   }
 
   const wantedTrails = TRAIL_LAYERS.filter(([id]) => $(`#trail-${id}`).checked);
@@ -779,7 +889,9 @@ async function refresh() {
   inFlight = null;
   // Nieudane pobranie nie może zostać zapamiętane jako wczytany widok,
   // bo kolejne przesunięcia mapy odtwarzałyby pustkę z pamięci.
-  loadedFor = failed ? null : { bounds, band: band(zoom) };
+  loadedFor = failed
+    ? null
+    : { bounds, band: band(zoom), bdl: wantBdl, osm: new Set(wantOsm) };
   const shown = renderPois();
   const ms = Math.round(performance.now() - started);
   setStatus(
@@ -996,31 +1108,47 @@ function trailPopup(feature) {
 
 /* ---------------------------------------------------------- OpenStreetMap */
 
-function overpassQuery(bounds) {
+function overpassQuery(bounds, wanted) {
   const bbox = [
     round(bounds.getSouth()), round(bounds.getWest()),
     round(bounds.getNorth()), round(bounds.getEast()),
   ].join(",");
+  const body = wanted.map((t) => `  ${OSM_QUERY[t]}(${bbox});`).join("\n");
   return `[out:json][timeout:25];
 (
-  nwr["amenity"="shelter"](${bbox});
-  nwr["tourism"="picnic_site"](${bbox});
-  nwr["leisure"="firepit"](${bbox});
+${body}
 );
 out center;`;
 }
 
-async function loadOsm(bounds, signal) {
-  const snap = await loadSnapshot();
-  if (snap) {
-    return { items: pointsFrom(snap, bounds), endpoint: `zrzut z ${snap.generated}`, tried: [] };
-  }
+async function loadOsm(bounds, wanted, signal) {
+  if (!wanted.length) return { items: [], endpoint: null, tried: [] };
 
+  const snap = await loadSnapshot();
+  // Zrzut powstał z konkretnej listy tagów. Rodzaj, którego w nim nie ma,
+  // dociągamy na żywo, zamiast po cichu go pomijać.
+  const stored = snap ? wanted.filter((t) => snap.types.includes(t)) : [];
+  const live = wanted.filter((t) => !stored.includes(t));
+
+  const items = stored.length ? pointsFrom(snap, bounds, stored) : [];
+  const parts = stored.length ? [`zrzut z ${snap.generated}`] : [];
+
+  if (!live.length) return { items, endpoint: parts.join(" + "), tried: [] };
+
+  const fresh = await liveOsm(bounds, live, signal);
+  return {
+    items: items.concat(fresh.items),
+    endpoint: [...parts, fresh.endpoint].filter(Boolean).join(" + "),
+    tried: fresh.tried,
+  };
+}
+
+async function liveOsm(bounds, wanted, signal) {
   if (areaOf(bounds) > HARD_OSM_AREA) {
     throw new Error("obszar zbyt duży dla Overpass - przybliż mapę");
   }
 
-  const q = overpassQuery(bounds);
+  const q = overpassQuery(bounds, wanted);
   const key = `osm:${q}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.ts < CACHE_TTL) {
@@ -1035,7 +1163,9 @@ async function loadOsm(bounds, signal) {
   const { data, url, tried } = await raceOverpass(order, q, signal);
   // HTTP 200 z zerem elementów to poprawna odpowiedź, a nie awaria -
   // nie wolno przez nią przechodzić do kolejnych serwerów.
-  const items = unique((data.elements || []).map(normalizeOsm).filter(Boolean));
+  const items = unique(
+    (data.elements || []).map(normalizeOsm).filter((p) => p && wanted.includes(p.type))
+  );
   cacheSet(key, items);
   rememberEndpoint(url);
   return { items, endpoint: `serwer ${url}`, tried };
@@ -1131,7 +1261,7 @@ function loadSnapshot() {
   return snapshotPromise;
 }
 
-function pointsFrom(snap, bounds) {
+function pointsFrom(snap, bounds, wanted) {
   const south = bounds.getSouth();
   const north = bounds.getNorth();
   const west = bounds.getWest();
@@ -1141,6 +1271,7 @@ function pointsFrom(snap, bounds) {
   for (const [lat, lon, type, bus, osmType, osmId, name] of snap.points) {
     if (lat < south || lat > north || lon < west || lon > east) continue;
     const kind = snap.types[type];
+    if (!wanted.includes(kind)) continue;
     const osmKind = snap.osmTypes[osmType];
     out.push({
       id: `OSM:${osmKind}/${osmId}`,
@@ -1174,6 +1305,7 @@ function normalizeOsm(e) {
   if (t.leisure === "firepit") type = "firepit";
   else if (t.amenity === "shelter") type = "shelter";
   else if (t.tourism === "picnic_site") type = "picnic";
+  else if (t.amenity === "parking") type = "parking";
   if (!type) return null;
 
   const bus =
@@ -1194,24 +1326,19 @@ function normalizeOsm(e) {
 function renderPois() {
   poiLayer.clearLayers();
 
-  const showBdl = $("#src-bdl").checked;
-  const showOsm = $("#src-osm").checked;
   const onlyZone = $("#only-zone").checked;
   const hideBus = $("#hide-bus").checked;
 
-  // Filtr typu stosujemy na końcu, żeby dało się policzyć, ile trafień
-  // dałby każdy typ przy obecnych pozostałych ustawieniach - liczba przy
+  // Filtr rodzaju stosujemy na końcu, żeby dało się policzyć, ile trafień
+  // dałby każdy rodzaj przy obecnych pozostałych ustawieniach - liczba przy
   // filtrze mówi, czy warto go w ogóle włączać.
   const pool = [...bdlPois, ...osmPois]
-    .filter((p) => (p.source === "BDL" ? showBdl : showOsm))
     .filter((p) => !(hideBus && p.source === "OSM" && p.bus));
-
-  const list = pool.filter((p) => enabled.has(p.type));
 
   for (const p of pool) p.inZone = insideZone(p.lon, p.lat);
 
   const inScope = onlyZone ? pool.filter((p) => p.inZone) : pool;
-  const visible = inScope.filter((p) => enabled.has(p.type));
+  const visible = inScope.filter((p) => enabled[p.source].has(p.type));
   updateTypeCounts(inScope);
   const capped = visible.slice(0, MAX_MARKERS);
   fanOut(capped);
@@ -1230,7 +1357,7 @@ function renderPois() {
     showMessage(`Pokazuję ${capped.length} z ${visible.length} punktów. Przybliż, żeby zobaczyć resztę.`);
   }
 
-  updateCounts(capped.length);
+  updateCounts(capped.length, visible);
   return capped.length;
 }
 
@@ -1326,19 +1453,34 @@ function insideZone(lon, lat) {
 // więc odpowiada na pytanie "ile dostanę, jeśli to włączę".
 function updateTypeCounts(items) {
   const counts = new Map();
-  for (const p of items) counts.set(p.type, (counts.get(p.type) || 0) + 1);
+  for (const p of items) {
+    const key = `${p.source}:${p.type}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
 
   for (const el of document.querySelectorAll(".check-count")) {
+    const [src, type] = el.dataset.count.split(":");
+    // Rodzaju, którego nie pobraliśmy, nie umiemy policzyć - zero mówiłoby
+    // nieprawdę, że go tam nie ma.
+    if (!fetched[src].has(type)) {
+      el.textContent = "-";
+      el.dataset.empty = "1";
+      continue;
+    }
     const n = counts.get(el.dataset.count) || 0;
     el.textContent = n;
     el.dataset.empty = n ? "0" : "1";
   }
 }
 
-function updateCounts(shown = null) {
+function updateCounts(shown = null, visible = null) {
   $("#zones").textContent = zones.length;
-  $("#bdl").textContent = bdlPois.length;
-  $("#osm").textContent = osmPois.length;
+  if (visible) {
+    // Podsumowanie mówi o tym, co widać przy obecnych filtrach, a nie o tym,
+    // ile rekordów przyszło z serwera - to drugie jest w wierszu stanu.
+    $("#bdl").textContent = visible.filter((p) => p.source === "BDL").length;
+    $("#osm").textContent = visible.filter((p) => p.source === "OSM").length;
+  }
   if (shown !== null) $("#shown").textContent = shown;
 }
 
@@ -1398,6 +1540,7 @@ function abortInFlight() {
 
 function resetData() {
   zones = []; zoneBoxes = []; bdlPois = []; osmPois = []; loadedFor = null;
+  fetched.BDL = new Set(); fetched.OSM = new Set();
 }
 
 function band(zoom) {

@@ -41,12 +41,24 @@ nie osobna karta. Przyciski mają trzy warianty (`btn-primary`, `btn-secondary`,
 
 ## Filtry
 
-- typy obiektów (wiaty, paleniska, miejsca wypoczynku, woda, toalety, biwak,
-  parking, punkty widokowe); przy każdym typie widać, **ile trafień da po
-  uwzględnieniu pozostałych filtrów** - liczba odpowiada na pytanie, czy warto
-  go w ogóle włączać
-- źródło danych (BDL / OSM) niezależnie; domyślnie włączone jest **tylko BDL**,
-  bo dane Lasów Państwowych są powiązane z programem, a OSM stanowi uzupełnienie
+Każde źródło ma **własną listę rodzajów** i własny stan zaznaczeń: "paleniska
+z BDL" i "paleniska z OSM" to dwa niezależne pytania, bo bazy opisują teren
+inaczej i rzadko się pokrywają.
+
+- **Lasy Państwowe (BDL)**: wiaty, paleniska, miejsca wypoczynku, woda pitna,
+  toalety, miejsca biwakowe, parkingi, punkty widokowe - domyślnie wszystko
+  włączone, bo te dane są powiązane z programem
+- **OpenStreetMap**: wiaty, paleniska, miejsca wypoczynku, parkingi - domyślnie
+  wszystko wyłączone; OSM jest uzupełnieniem
+- przy każdym rodzaju widać, **ile trafień da po uwzględnieniu pozostałych
+  filtrów** - liczba odpowiada na pytanie, czy warto go w ogóle włączać.
+  Myślnik zamiast liczby znaczy, że tego rodzaju nie pobieraliśmy, więc zera
+  nie mamy z czego policzyć
+- nagłówek sekcji przełącza całe źródło jednym kliknięciem
+- **odznaczenie wszystkiego w źródle wyłącza jego pobieranie** - z OSM idzie
+  do sieci wyłącznie to, co jest zaznaczone, więc filtr jest jednocześnie
+  regulatorem czasu ładowania. Zawężenie filtrów obsługujemy z pamięci;
+  do sieci wracamy dopiero po zaznaczeniu rodzaju, którego jeszcze nie ma
 - **Tylko wewnątrz obszarów Zanocuj w lesie** - domyślnie **włączone**; po
   odznaczeniu widać też punkty spoza obszarów programu, w szczególności OSM,
   który nie jest przypisany do jego granic
@@ -81,22 +93,33 @@ zapasowe.
 Format jest krotkowy, żeby plik był możliwie mały:
 `[lat, lon, typ, wiataPrzystankowa, typOsm, idOsm, nazwa]`.
 
-Jeśli zrzutu nie ma (404), aplikacja awaryjnie odpytuje Overpass na żywo -
+Zrzut obejmuje wiaty, paleniska i miejsca wypoczynku. Parkingów w nim nie ma -
+w skali kraju jest ich tyle, że plik przestałby się nadawać do trzymania w
+repozytorium. Rodzaj, którego w zrzucie brakuje, aplikacja dociąga z Overpassa
+na żywo, zamiast po cichu go pomijać.
+
+Jeśli zrzutu nie ma (404), z Overpassa idzie komplet zaznaczonych rodzajów -
 opisane niżej.
 
 ## Zapytanie Overpass (tryb awaryjny)
 
 Dokładnie to, które działa w overpass-turbo:
 
+Treść zapytania zależy od zaznaczonych rodzajów - poniżej komplet:
+
 ```
 [out:json][timeout:25];
 (
   nwr["amenity"="shelter"]({{bbox}});
-  nwr["tourism"="picnic_site"]({{bbox}});
   nwr["leisure"="firepit"]({{bbox}});
+  nwr["tourism"="picnic_site"]({{bbox}});
+  nwr["amenity"="parking"]["access"!~"private|no|customers"]({{bbox}});
 );
 out center;
 ```
+
+Parkingi prywatne i zamknięte odsiewamy w zapytaniu: jest ich w OSM więcej niż
+publicznych, a nocującemu i tak się nie przydadzą.
 
 Kolejność serwerów: `overpass.kumi.systems`, `overpass-api.de`,
 `overpass.private.coffee`, a na końcu własne proxy `/api/osm` (jedyna droga,
