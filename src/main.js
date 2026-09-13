@@ -3,6 +3,7 @@ import "./style.css";
 import L from "leaflet";
 import booleanPointInPolygon from "@turf/boolean-point-in-polygon";
 import { point } from "@turf/helpers";
+import { inject } from "@vercel/analytics";
 
 const MIN_ZONE_ZOOM = 7;
 const MIN_POI_ZOOM = 10;
@@ -608,6 +609,9 @@ document.addEventListener("click", async (e) => {
   }
   setTimeout(() => { btn.textContent = "kopiuj"; }, 1600);
 });
+
+// Initialize Vercel Web Analytics
+inject();
 
 const start = readHash() || { lat: 52, lon: 19.2, zoom: 7 };
 const map = L.map("map").setView([start.lat, start.lon], start.zoom);
