@@ -1,0 +1,50 @@
+name: Zrzut obszarów Zanocuj w lesie
+
+# Granice obszarów programu zmieniają się rzadko, a ich pobieranie z ArcGIS
+# było najwolniejszą częścią wejścia na stronę. Trzymamy je więc w repozytorium
+# i odświeżamy raz na dobę tutaj, zamiast przy każdym otwarciu mapy.
+on:
+  schedule:
+    - cron: "40 2 * * *"
+  workflow_dispatch:
+  # Pierwsze wypełnienie pliku ma nastąpić samo, bez czekania na nocny
+  # harmonogram, więc zmiana skryptu lub tego workflow też go uruchamia.
+  push:
+    branches: [main]
+    paths:
+      - scripts/fetch-zones.mjs
+      - .github/workflows/zones-snapshot.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: zones-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pobierz obszary z BDL
+        run: node scripts/fetch-zones.mjs
+
+      - name: Zapisz zrzut w repozytorium
+        run: |
+          if git diff --quiet -- public/zones-poland.json; then
+            echo "Zrzut bez zmian."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/zones-poland.json
+          git commit -m "Update Zanocuj w lesie zone snapshot"
+          git push

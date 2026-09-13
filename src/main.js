@@ -46,6 +46,12 @@ const TRAIL_COLORS = {
 // awaryjne źródło, gdy zrzutu nie ma.
 const SNAPSHOT_URL = "/osm-poland.json";
 
+// Granice obszarów programu zmieniają się rzadko, a ich pobieranie z ArcGIS
+// było najwolniejszą częścią wejścia na stronę. Zrzut leży obok aplikacji,
+// więc fiolet pojawia się od razu; odświeża go raz na dobę workflow
+// "Zrzut obszarów Zanocuj w lesie".
+const ZONES_URL = "/zones-poland.json";
+
 const SNAPSHOT_TAGS = {
   shelter: "amenity=shelter",
   firepit: "leisure=firepit",
@@ -694,6 +700,18 @@ let overpassPreferred = readPreferredEndpoint();
 let snapshot = null;
 let snapshotState = "unknown";
 let snapshotPromise = null;
+let zoneSnapshot = null;
+let zoneSnapshotBoxes = [];
+let zoneSnapshotPromise = null;
+let zoneDrawn = [];
+
+// Zrzut ruszamy przed pierwszym odświeżeniem i niezależnie od niego: obszary
+// mają się pojawić tak szybko, jak wróci plik, a nie po całym cyklu pobierania.
+loadZoneSnapshot().then((snap) => {
+  if (!snap || map.getZoom() < MIN_ZONE_ZOOM) return;
+  applyZoneSnapshot(padBounds(map.getBounds(), padFor(map.getBounds())));
+  renderPois();
+});
 
 map.on("moveend zoomend", () => { writeHash(); schedule(); });
 window.addEventListener("hashchange", () => {
@@ -782,24 +800,33 @@ async function refresh() {
   const jobs = [];
 
   jobs.push(
-    loadZones(bounds, zoom, controller.signal).then(
-      (features) => {
-        if (id !== serial) return;
-        zones = features;
-        zoneBoxes = features.map(featureBbox);
-        zoneLayer.clearLayers();
-        zoneLayer.addData({ type: "FeatureCollection", features });
-        updateCounts();
-      },
-      (e) => {
-        if (id !== serial) return;
-        zones = [];
-        zoneBoxes = [];
-        zoneLayer.clearLayers();
-        failed = true;
-        notes.push(`Obszary BDL: ${errText(e)}`);
+    loadZoneSnapshot().then((snap) => {
+      if (id !== serial) return;
+      if (snap) {
+        applyZoneSnapshot(bounds);
+        notes.push(`Obszary: zrzut z ${snap.generated} (${snap.count} w kraju)`);
+        return;
       }
-    )
+      // Zrzutu jeszcze nie ma - wracamy do pytania ArcGIS o sam widok.
+      return loadZones(bounds, zoom, controller.signal).then(
+        (features) => {
+          if (id !== serial) return;
+          zones = features;
+          zoneBoxes = features.map(featureBbox);
+          zoneLayer.clearLayers();
+          zoneLayer.addData({ type: "FeatureCollection", features });
+          updateCounts();
+        },
+        (e) => {
+          if (id !== serial) return;
+          zones = [];
+          zoneBoxes = [];
+          zoneLayer.clearLayers();
+          failed = true;
+          notes.push(`Obszary BDL: ${errText(e)}`);
+        }
+      );
+    })
   );
 
   if (zoom >= MIN_POI_ZOOM && wantBdl) {
@@ -914,6 +941,55 @@ const ZONE_DETAIL = [
   { minZoom: 9, offset: "0.0002", precision: "5", pages: 3 },
   { minZoom: 0, offset: "0.01", precision: "3", pages: 1 },
 ];
+
+// Zrzut pobieramy raz na sesję. Nieudane pobranie zapamiętujemy jako brak
+// zrzutu, żeby każde przesunięcie mapy nie próbowało go od nowa.
+function loadZoneSnapshot() {
+  if (zoneSnapshotPromise) return zoneSnapshotPromise;
+
+  zoneSnapshotPromise = getJson(ZONES_URL, null, 30000).then(
+    (data) => {
+      if (!Array.isArray(data?.features) || !data.features.length) {
+        throw new Error("nieprawidłowy format zrzutu obszarów");
+      }
+      zoneSnapshot = data;
+      zoneSnapshotBoxes = data.features.map(featureBbox);
+      return zoneSnapshot;
+    },
+    () => null
+  );
+
+  return zoneSnapshotPromise;
+}
+
+// Ze zrzutu bierzemy tylko obszary dotykające widoku: cały kraj to tysiące
+// wielokątów, a rysowanie ich poza ekranem nic nie wnosi. Sprawdzenie
+// "punkt w strefie" też dotyczy wyłącznie punktów z widoku, więc ten sam
+// podzbiór wystarcza obu zadaniom.
+function applyZoneSnapshot(bounds) {
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+
+  const idx = [];
+  for (let i = 0; i < zoneSnapshotBoxes.length; i++) {
+    const b = zoneSnapshotBoxes[i];
+    if (!b || b[2] < west || b[0] > east || b[3] < south || b[1] > north) continue;
+    idx.push(i);
+  }
+
+  zones = idx.map((i) => zoneSnapshot.features[i]);
+  zoneBoxes = idx.map((i) => zoneSnapshotBoxes[i]);
+  updateCounts();
+
+  // Przerysowanie tego samego zestawu kosztuje tyle samo co pierwsze, więc
+  // przy drobnym przesunięciu mapy je pomijamy.
+  if (idx.length === zoneDrawn.length && idx.every((v, i) => v === zoneDrawn[i])) return;
+  zoneDrawn = idx;
+  zoneLayer.clearLayers();
+  zoneLayer.addData({ type: "FeatureCollection", features: zones });
+}
 
 function loadZones(bounds, zoom, signal) {
   const detail = ZONE_DETAIL.find((d) => zoom >= d.minZoom);
@@ -1540,6 +1616,7 @@ function abortInFlight() {
 
 function resetData() {
   zones = []; zoneBoxes = []; bdlPois = []; osmPois = []; loadedFor = null;
+  zoneDrawn = [];
   fetched.BDL = new Set(); fetched.OSM = new Set();
 }
 

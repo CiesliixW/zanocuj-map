@@ -65,6 +65,27 @@ inaczej i rzadko się pokrywają.
 - **Ukryj wiaty przystankowe (OSM)** - domyślnie wyłączone, żeby wynik zgadzał
   się 1:1 z overpass-turbo
 
+## Skąd biorą się obszary programu
+
+Granice obszarów **Zanocuj w lesie** leżą w `public/zones-poland.json` - jednym
+pliku obok aplikacji. Fiolet pojawia się więc od razu po wejściu na stronę,
+bez czekania na ArcGIS, a przesuwanie mapy nie generuje ani jednego zapytania
+o granice: z pamięci wybieramy te obszary, które dotykają widoku.
+
+Zrzut odświeża workflow **Zrzut obszarów Zanocuj w lesie**
+(`.github/workflows/zones-snapshot.yml`): raz na dobę (02:40 UTC), ręcznie z
+zakładki Actions oraz przy każdej zmianie samego skryptu - dzięki temu pierwszy
+plik powstaje sam, bez czekania na nocny harmonogram. Commit powstaje wyłącznie
+wtedy, gdy zmieniły się granice; sama data wygenerowania go nie wyzwala.
+
+`scripts/fetch-zones.mjs` pobiera warstwę 0 stronami po 250 rekordów i dobiera
+uproszczenie geometrii sam: zaczyna od najdokładniejszego (0,0002 stopnia, ok.
+20 m) i sięga po grubsze dopiero, gdy plik nie mieści się w budżecie 3 MB.
+Ten sam podzbiór obszarów obsługuje rysowanie i test "punkt w obrębie strefy",
+więc dokładność zrzutu jest zarazem dokładnością filtra.
+
+Dopóki zrzutu nie ma (404), aplikacja pyta ArcGIS o sam widok, jak wcześniej.
+
 ## Skąd biorą się dane OSM
 
 Głównym źródłem jest **statyczny zrzut całej Polski** w `public/osm-poland.json`,
