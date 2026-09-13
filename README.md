@@ -65,26 +65,43 @@ inaczej i rzadko się pokrywają.
 - **Ukryj wiaty przystankowe (OSM)** - domyślnie wyłączone, żeby wynik zgadzał
   się 1:1 z overpass-turbo
 
-## Skąd biorą się obszary programu
+## Skąd biorą się dane BDL
 
 Granice obszarów **Zanocuj w lesie** leżą w `public/zones-poland.json` - jednym
 pliku obok aplikacji. Fiolet pojawia się więc od razu po wejściu na stronę,
 bez czekania na ArcGIS, a przesuwanie mapy nie generuje ani jednego zapytania
 o granice: z pamięci wybieramy te obszary, które dotykają widoku.
 
-Zrzut odświeża workflow **Zrzut obszarów Zanocuj w lesie**
-(`.github/workflows/zones-snapshot.yml`): raz na dobę (02:40 UTC), ręcznie z
-zakładki Actions oraz przy każdej zmianie samego skryptu - dzięki temu pierwszy
-plik powstaje sam, bez czekania na nocny harmonogram. Commit powstaje wyłącznie
-wtedy, gdy zmieniły się granice; sama data wygenerowania go nie wyzwala.
+Tak samo działają **punkty rekreacyjne**: `public/bdl-points.json` zawiera
+komplet z dziesięciu warstw punktowych, więc przesunięcie mapy nie odpytuje już
+dziesięciu warstw ArcGIS naraz.
 
-`scripts/fetch-zones.mjs` pobiera warstwę 0 stronami po 250 rekordów i dobiera
-uproszczenie geometrii sam: zaczyna od najdokładniejszego (0,0002 stopnia, ok.
-20 m) i sięga po grubsze dopiero, gdy plik nie mieści się w budżecie 3 MB.
-Ten sam podzbiór obszarów obsługuje rysowanie i test "punkt w obrębie strefy",
-więc dokładność zrzutu jest zarazem dokładnością filtra.
+Jedno miejsce wypoczynku bywa jednocześnie wiatą, paleniskiem i parkingiem.
+W pliku leży jako **jeden rekord z maską udogodnień**, a na osobne punkty
+rozbija się dopiero w przeglądarce - inaczej nazwa i adres powtarzałyby się po
+sześć razy. Kolejność bitów maski i tabela warstw jadą w samym pliku, więc
+aplikacja i skrypt nie mogą się rozjechać.
 
-Dopóki zrzutu nie ma (404), aplikacja pyta ArcGIS o sam widok, jak wcześniej.
+Oba zrzuty odświeża workflow **Zrzut danych BDL**
+(`.github/workflows/bdl-snapshot.yml`): raz na dobę (02:40 UTC), ręcznie z
+zakładki Actions oraz przy każdej zmianie skryptów - dzięki temu pierwsze pliki
+powstają same, bez czekania na nocny harmonogram. Commit powstaje wyłącznie
+wtedy, gdy zmieniły się dane; sama data wygenerowania go nie wyzwala.
+
+`scripts/fetch-zones.mjs` dobiera uproszczenie geometrii sam: zaczyna od
+najdokładniejszego (0,0002 stopnia, ok. 20 m) i sięga po grubsze dopiero, gdy
+plik nie mieści się w budżecie 3 MB. Ten sam podzbiór obszarów obsługuje
+rysowanie i test "punkt w obrębie strefy", więc dokładność zrzutu jest zarazem
+dokładnością filtra.
+
+Wspólne dla obu skryptów pobieranie siedzi w `scripts/bdl-client.mjs`. BDL
+potrafi na kilka minut odpowiadać 502 - i tak padł przebieg z 13 września -
+więc ponawianie sięga minuty przerwy między próbami, a workflow dokłada trzy
+podejścia z dłuższą pauzą. Nieudany zrzut punktów nie wyrzuca świeżo pobranych
+granic: każdy plik zapisuje się osobno.
+
+Dopóki zrzutów nie ma (404), aplikacja pyta ArcGIS o sam widok, jak wcześniej -
+osobno dla granic i osobno dla punktów.
 
 ## Skąd biorą się dane OSM
 
