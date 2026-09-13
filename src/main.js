@@ -52,6 +52,10 @@ const SNAPSHOT_URL = "/osm-poland.json";
 // "Zrzut obszarów Zanocuj w lesie".
 const ZONES_URL = "/zones-poland.json";
 
+// To samo dotyczy punktów: dziesięć warstw ArcGIS odpytywanych przy każdym
+// przesunięciu mapy zastępuje jeden plik obok aplikacji.
+const BDL_POINTS_URL = "/bdl-points.json";
+
 const SNAPSHOT_TAGS = {
   shelter: "amenity=shelter",
   firepit: "leisure=firepit",
@@ -704,6 +708,8 @@ let zoneSnapshot = null;
 let zoneSnapshotBoxes = [];
 let zoneSnapshotPromise = null;
 let zoneDrawn = [];
+let bdlSnapshot = null;
+let bdlSnapshotPromise = null;
 
 // Zrzut ruszamy przed pierwszym odświeżeniem i niezależnie od niego: obszary
 // mają się pojawić tak szybko, jak wróci plik, a nie po całym cyklu pobierania.
@@ -831,11 +837,12 @@ async function refresh() {
 
   if (zoom >= MIN_POI_ZOOM && wantBdl) {
     jobs.push(
-      loadBdlPois(bounds, controller.signal).then(
-        ({ items, errors }) => {
+      loadBdlPoints(bounds, controller.signal).then(
+        ({ items, errors, note }) => {
           if (id !== serial) return;
           bdlPois = items;
           fetched.BDL = new Set(SOURCES.BDL.types);
+          if (note) notes.push(note);
           if (errors.length) { failed = true; notes.push(`Punkty BDL: ${errors.join(" | ")}`); }
           renderPois();
         },
@@ -999,6 +1006,81 @@ function loadZones(bounds, zoom, signal) {
     geometryPrecision: detail.precision,
     maxPages: detail.pages,
   });
+}
+
+// Punkty z BDL: najpierw zrzut całego kraju, a dopiero gdy go nie ma -
+// dziesięć zapytań do ArcGIS o sam widok, jak wcześniej.
+async function loadBdlPoints(bounds, signal) {
+  const snap = await loadBdlSnapshot();
+  if (snap) {
+    return {
+      items: pointsFromBdlSnapshot(snap, bounds),
+      errors: [],
+      note: `Punkty BDL: zrzut z ${snap.generated} (${snap.count} w kraju)`,
+    };
+  }
+  const live = await loadBdlPois(bounds, signal);
+  return { ...live, note: null };
+}
+
+function loadBdlSnapshot() {
+  if (bdlSnapshotPromise) return bdlSnapshotPromise;
+
+  bdlSnapshotPromise = getJson(BDL_POINTS_URL, null, 30000).then(
+    (data) => {
+      if (!Array.isArray(data?.points) || !Array.isArray(data?.layers) || !Array.isArray(data?.flags)) {
+        throw new Error("nieprawidłowy format zrzutu punktów");
+      }
+      bdlSnapshot = data;
+      return bdlSnapshot;
+    },
+    () => null
+  );
+
+  return bdlSnapshotPromise;
+}
+
+// Odpowiednik normalizeBdl dla danych ze zrzutu. Jedno miejsce wypoczynku bywa
+// jednocześnie wiatą, paleniskiem i parkingiem, więc w pliku leży jako jeden
+// rekord z maską udogodnień, a na punkty rozbija się dopiero tutaj.
+function pointsFromBdlSnapshot(snap, bounds) {
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const out = [];
+
+  for (let i = 0; i < snap.points.length; i++) {
+    const [lat, lon, layerIdx, flags, name, address, link] = snap.points[i];
+    if (lat < south || lat > north || lon < west || lon > east) continue;
+
+    const spec = snap.layers[layerIdx];
+    if (!spec) continue;
+    const [layer, kind, label] = spec;
+
+    const base = {
+      source: "BDL", layer, lon, lat,
+      name: name || null, address: address || null, link: link || null,
+    };
+    const before = out.length;
+    // Etykieta warstwy pasuje tylko tam, gdzie warstwa odpowiada typowi
+    // wprost. Punkt wyprowadzony z flagi opisuje samo udogodnienie.
+    const add = (type, layerLabel = null) =>
+      out.push({ ...base, id: `BDL:${layer}:${i}:${type}`, type, layerLabel });
+
+    if (kind === "rest" || kind === "other") {
+      for (let bit = 0; bit < snap.flags.length; bit++) {
+        if (flags & (1 << bit)) add(snap.flags[bit]);
+      }
+      // Warstwa "inne obiekty" bywa bez flag udogodnień; bez tego jej punkty
+      // przepadłyby mimo udanego pobrania.
+      if (out.length === before) add("picnic", label);
+    } else {
+      add(kind, label);
+    }
+  }
+
+  return out;
 }
 
 async function loadBdlPois(bounds, signal) {

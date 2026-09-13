@@ -1,0 +1,83 @@
+name: Zrzut danych BDL
+
+# Obszary programu i punkty rekreacyjne zmieniają się rzadko, a ich pobieranie
+# z ArcGIS było najwolniejszą częścią korzystania z mapy: wejście na stronę
+# czekało na granice, a każde przesunięcie mapy odpytywało dziesięć warstw
+# punktowych naraz. Trzymamy więc komplet w repozytorium i odświeżamy go tutaj.
+on:
+  schedule:
+    - cron: "40 2 * * *"
+  workflow_dispatch:
+  # Pierwsze wypełnienie plików ma nastąpić samo, bez czekania na nocny
+  # harmonogram, więc zmiana skryptów lub tego workflow też je uruchamia.
+  push:
+    branches: [main]
+    paths:
+      - scripts/fetch-zones.mjs
+      - scripts/fetch-bdl-points.mjs
+      - scripts/bdl-client.mjs
+      - .github/workflows/bdl-snapshot.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bdl-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pobierz dane z BDL
+        id: pull
+        run: |
+          # BDL potrafi na kilka minut odpowiadać 502 - tak padł przebieg
+          # z 13.09. Ponawianie w samym skrypcie sięga minuty między próbami,
+          # a tutaj dokładamy trzy podejścia z dłuższą przerwą, żeby dłuższa
+          # awaria po drugiej stronie nie kosztowała całej doby czekania.
+          attempt() {
+            for i in 1 2 3; do
+              if node "$1"; then return 0; fi
+              echo "::warning::$1 - podejście $i nie powiodło się"
+              sleep 180
+            done
+            return 1
+          }
+
+          fail=0
+          # Każdy zrzut osobno: awaria punktów nie może wyrzucić świeżych granic.
+          attempt scripts/fetch-zones.mjs || fail=1
+          attempt scripts/fetch-bdl-points.mjs || fail=1
+          echo "fail=$fail" >> "$GITHUB_OUTPUT"
+
+      - name: Zapisz zrzuty w repozytorium
+        run: |
+          # Pliki bywają nowe, a "git diff" nie widzi nieśledzonych i milczy
+          # tak samo jak przy braku zmian - porównujemy więc po dodaniu do
+          # indeksu. "git add -A" radzi sobie z tym, że któregoś pliku
+          # jeszcze nie ma.
+          git add -A public/
+          if git diff --cached --quiet -- public/; then
+            echo "Zrzuty bez zmian."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update BDL snapshots"
+          # Zdarzenie push checkoutuje SHA, nie gałąź, więc cel trzeba wskazać.
+          git push origin HEAD:main
+
+      - name: Zgłoś nieudane pobranie
+        if: steps.pull.outputs.fail == '1'
+        run: |
+          echo "Przynajmniej jeden zrzut się nie udał - szczegóły w logu kroku pobierania."
+          exit 1
