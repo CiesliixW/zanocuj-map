@@ -61,12 +61,15 @@ jobs:
 
       - name: Zapisz zrzut w repozytorium
         run: |
-          if git diff --quiet -- public/osm-poland.json; then
+          # Plik bywa nowy, a "git diff" nie widzi plików nieśledzonych i
+          # milczy tak samo jak przy braku zmian. Porównujemy więc dopiero
+          # po dodaniu do indeksu, inaczej pierwszy zrzut nigdy nie wchodzi.
+          git add public/osm-poland.json
+          if git diff --cached --quiet -- public/osm-poland.json; then
             echo "Zrzut bez zmian."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/osm-poland.json
           git commit -m "Update OSM snapshot for Poland"
-          git push
+          git push origin HEAD:main
